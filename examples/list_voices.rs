@@ -1,26 +1,31 @@
 use zbus;
 use spiel::proxy::ProviderProxy;
-use zbus::names::WellKnownName;
+use zbus::names::OwnedBusName;
 use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let session = zbus::Connection::session().await?;
 	let s = zbus::fdo::DBusProxy::new(&session).await?;
-	let mut active = WellKnownName::try_from("org.espeak.Speech.Provider")?;
+	let mut active = OwnedBusName::try_from("org.espeak.Speech.Provider")?;
 	for i in s.list_activatable_names().await? {
 		if i.contains("Speech.Provider") {
-			println!("{:?}", i);
+			println!("SP: {:?}", i);
+      active = i;
 		}
 	}
+  println!("AC: {}", active);
 	for i in s.interfaces().await? {
+		println!("INT: {:?}", i);
+	}
+	let prov = ProviderProxy::new(
+    &session,
+    active.clone(),
+    "/".to_owned() + &active.as_str().replace(".", "/"),
+  ).await?;
+	println!("Name: {:?}", prov.name().await?);
+	for i in prov.voices().await? {
 		println!("{:?}", i);
 	}
-	let x = s.start_service_by_name(active, 0).await?;
-	let prov = ProviderProxy::new(&session, "org.espeak.Speech.Provider", "/org/espeak/Speech/Provider").await?;
-	println!("Name: {:?}", prov.name().await?);
-	//for i in prov.voices().await? {
-	//	println!("{:?}", i);
-	//}
 	Ok(())
 }
