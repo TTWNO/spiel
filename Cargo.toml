@@ -16,5 +16,5 @@ serde = { version = "1.0.197", features = ["derive"] }
 zbus = { version = "4.1.2", optional = true }
 
 [dev-dependencies]
-tokio = { version = "1", default-features = false, features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", default-features = false, features = ["macros", "rt-multi-thread","net","io-util"] }
 spiel = { path = ".", features = ["client"] }
