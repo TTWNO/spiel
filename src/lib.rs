@@ -31,12 +31,17 @@ impl Default for Reader {
 }
 
 pub enum ChunkError {
-    InvalidChunkValue(u8),
-    Decode(core::str::Utf8Error),
+    DecodeStr(core::str::Utf8Error),
+		DecodeInt(core::num::TryFromIntError),
 }
 impl From<core::str::Utf8Error> for ChunkError {
     fn from(utfe: core::str::Utf8Error) -> ChunkError {
-        ChunkError::Decode(utfe)
+        ChunkError::DecodeStr(utfe)
+    }
+}
+impl From<core::num::TryFromIntError> for ChunkError {
+    fn from(utfe: core::num::TryFromIntError) -> ChunkError {
+        ChunkError::DecodeInt(utfe)
     }
 }
 
@@ -61,6 +66,9 @@ impl Reader {
     }
 }
 
+fn read_stream(buf: &[u8]) -> IResult<&[u8], Chunk> {
+	todo!()
+}
 
 fn read_chunk_size(buf: &[u8]) -> IResult<&[u8], u32> {
     // TODO: should this always be native? I'm pretty sure it dpeneds on the stream parameters?
@@ -90,26 +98,29 @@ fn read_event_data(buf: &[u8]) -> IResult<&[u8], Event> {
     map_res((
         u32(Endianness::Native),
         u32(Endianness::Native),
-        u32(Endianness::Native),
+        length_data(
+					u32::<&[u8], _>(Endianness::Native),
+				),
     ),
-    |(start,end,name_len)| Ok::<Event, core::num::TryFromIntError>(Event { 
+    |(start,end,nme)| Ok::<Event, ChunkError>(Event { 
         start: start.try_into()?,
         end: end.try_into()?,
-        name_len: name_len.try_into()?
+        name: if nme.len() > 0 {
+					Some(core::str::from_utf8(nme)?) }else {None }
     }))
     .parse(buf)
 }
 
-pub enum Chunk {
-    Version(&'static str),
-    Audio(),
-    Event(),
+pub enum Chunk<'a> {
+    Version(&'a str),
+    Audio(ChunkHold<'a>),
+    Event(Event<'a>),
 }
 
-pub struct Event {
+pub struct Event<'a> {
     pub start: usize,
     pub end: usize,
-    pub name_len: usize,
+		pub name: Option<&'a str>,
 }
 
 pub enum ChunkType {
