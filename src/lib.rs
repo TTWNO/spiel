@@ -1,8 +1,149 @@
+#![deny(
+    clippy::pedantic,
+    clippy::all,
+)]
+
 #[cfg(feature = "client")]
 pub mod proxy;
 
+use nom::{IResult,
+    bytes::streaming::take,
+    combinator::{map, map_res},
+    Parser,
+    number::{streaming::u32, Endianness},
+    multi::length_data,
+};
+
 use serde::{Serialize, Deserialize};
 use enumflags2::bitflags;
+
+pub struct Reader {
+    header_read: bool,
+    buf: Vec<u8>,
+}
+impl Default for Reader {
+    fn default() -> Self {
+        Reader {
+            header_read: false,
+            buf: Vec::with_capacity(1024),
+        }
+    }
+}
+
+pub enum ChunkError {
+    InvalidChunkValue(u8),
+    Decode(core::str::Utf8Error),
+}
+impl From<core::str::Utf8Error> for ChunkError {
+    fn from(utfe: core::str::Utf8Error) -> ChunkError {
+        ChunkError::Decode(utfe)
+    }
+}
+
+impl Reader {
+    pub fn consume_bytes(&mut self, ext: &[u8]) {
+        self.buf.extend_from_slice(ext);
+    }
+    /// Read existing bytes and create [`Event`]s from them.
+    /// Ok(Some(Chunk)) will be returned when an [`Event`] can be parsed from the byte buffer.
+    /// Otherwise (waiting for more bytes), Ok(None) will be returned.
+    /// 
+    /// # Errors
+    ///
+    /// - An invalid chunk identifier is used. [`enum@ChunkError::InvalidChunkValue`]. NOTE: since
+    ///     chunk identifiers are necessary to determine the length of the chunk to read, this is an
+    ///     unrecoverable error.
+    pub fn read_bytes(&mut self) -> Result<Option<Chunk>, ChunkError> {
+        if !self.header_read {
+            return Ok(None);
+        }
+        Ok(None)
+    }
+}
+
+
+fn read_chunk_size(buf: &[u8]) -> IResult<&[u8], u32> {
+    // TODO: should this always be native? I'm pretty sure it dpeneds on the stream parameters?
+    u32(Endianness::Native)(buf)
+}
+fn read_header(buf: &[u8]) -> IResult<&[u8], &str> {
+    map_res(take(4usize), |bytes: &[u8]| core::str::from_utf8(bytes)).parse(buf)
+}
+fn read_chunk_type(buf: &[u8]) -> IResult<&[u8], Option<ChunkType>> {
+    map(take(1usize), |bytes: &[u8]| ChunkType::from_u8(bytes[0])).parse(buf)
+}
+fn read_event_type(buf: &[u8]) -> IResult<&[u8], Option<EventType>> {
+    map(take(1usize), |bytes: &[u8]| EventType::from_u8(bytes[0])).parse(buf)
+}
+fn read_chunk(buf: &[u8]) -> IResult<&[u8], ChunkHold> {
+    map(
+        length_data(read_chunk_size),
+        |data| ChunkHold { buf: data },
+    ).parse(buf)
+}
+
+pub struct ChunkHold<'a> {
+    buf: &'a [u8],
+}
+
+fn read_event_data(buf: &[u8]) -> IResult<&[u8], Event> {
+    map_res((
+        u32(Endianness::Native),
+        u32(Endianness::Native),
+        u32(Endianness::Native),
+    ),
+    |(start,end,name_len)| Ok::<Event, core::num::TryFromIntError>(Event { 
+        start: start.try_into()?,
+        end: end.try_into()?,
+        name_len: name_len.try_into()?
+    }))
+    .parse(buf)
+}
+
+pub enum Chunk {
+    Version(&'static str),
+    Audio(),
+    Event(),
+}
+
+pub struct Event {
+    pub start: usize,
+    pub end: usize,
+    pub name_len: usize,
+}
+
+pub enum ChunkType {
+    Event,
+    Audio
+}
+impl ChunkType {
+    fn from_u8(b: u8) -> Option<Self> {
+        match b {
+            1 => Some(ChunkType::Event),
+            2 => Some(ChunkType::Audio),
+            _ => None,
+        }
+    }
+}
+
+#[repr(u8)]
+pub enum EventType {
+    Word,
+    Sentence,
+    Range,
+    Mark,
+}
+impl EventType {
+    fn from_u8(b: u8) -> Option<EventType> {
+        match b {
+            1 => Some(EventType::Word),
+            2 => Some(EventType::Sentence),
+            3 => Some(EventType::Range),
+            4 => Some(EventType::Mark),
+            _ => None
+        }
+    }
+}
 
 #[bitflags]
 #[repr(u64)]
