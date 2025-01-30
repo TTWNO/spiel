@@ -66,7 +66,13 @@ impl Reader {
     }
 }
 
-fn read_stream(buf: &[u8]) -> IResult<&[u8], Chunk> {
+fn read_chunk(buf: &[u8], header_already_read: bool) -> IResult<&[u8], Chunk> {
+	if !header_already_read {
+		return map_res(
+			read_header,
+			|ver| Ok::<Chunk, ChunkError>(Chunk::Version(ver)),
+		).parse(buf);
+	}
 	todo!()
 }
 
@@ -83,7 +89,7 @@ fn read_chunk_type(buf: &[u8]) -> IResult<&[u8], Option<ChunkType>> {
 fn read_event_type(buf: &[u8]) -> IResult<&[u8], Option<EventType>> {
     map(take(1usize), |bytes: &[u8]| EventType::from_u8(bytes[0])).parse(buf)
 }
-fn read_chunk(buf: &[u8]) -> IResult<&[u8], ChunkHold> {
+fn read_chunk_audio(buf: &[u8]) -> IResult<&[u8], ChunkHold> {
     map(
         length_data(read_chunk_size),
         |data| ChunkHold { buf: data },
