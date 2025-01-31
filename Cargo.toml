@@ -10,6 +10,7 @@ license = "MIT or Apache-2.0"
 client = ["dep:zbus"]
 
 [dependencies]
+assert_matches = { version = "1.5.0", default-features = false }
 bitflags = "2.4.2"
 enumflags2 = "0.7.9"
 nom = { version = "8.0.0", default-features = false }
