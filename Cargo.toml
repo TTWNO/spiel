@@ -20,3 +20,5 @@ zbus = { version = "4.1.2", optional = true }
 [dev-dependencies]
 tokio = { version = "1", default-features = false, features = ["macros", "rt-multi-thread","net","io-util"] }
 spiel = { path = ".", features = ["client"] }
+hound = "3.5.1"
+itertools = "0.14.0"

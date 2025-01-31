@@ -37,7 +37,7 @@ impl Reader {
     }
 }
 
-fn read_chunk(buf: &[u8], header_already_read: bool) -> IResult<&[u8], Chunk> {
+pub fn read_chunk(buf: &[u8], header_already_read: bool) -> IResult<&[u8], Chunk> {
 	if !header_already_read {
 		return map(
 			read_header,
@@ -100,7 +100,7 @@ fn read_chunk_audio(buf: &[u8]) -> IResult<&[u8], Chunk> {
 
 #[derive(PartialEq)]
 pub struct ChunkHold<'a> {
-    buf: &'a [u8],
+    pub buf: &'a [u8],
 }
 impl core::fmt::Debug for ChunkHold<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
