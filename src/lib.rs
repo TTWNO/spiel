@@ -32,11 +32,12 @@ impl Reader {
 #[test]
 fn test_wave() {
     use assert_matches::assert_matches;
-    let data = include_bytes!("../test.wav");
-    let (data, chunk) = read_chunk(data, false)
+    let mut data: &[u8] = include_bytes!("../test.wav");
+		let mut chunk = Chunk::Version("");
+    (data, chunk) = read_chunk(data, false)
         .expect("read data!");
     assert_eq!(chunk, Chunk::Version("0.01"));
-    let (data, chunk) = read_chunk(data, true)
+    (data, chunk) = read_chunk(data, true)
         .expect("read data!");
     assert_eq!(chunk, Chunk::Event(Event {
         typ: EventType::Sentence,
@@ -44,7 +45,7 @@ fn test_wave() {
         end: 0,
         name: None
     }));
-    let (data, chunk) = read_chunk(data, true)
+    (data, chunk) = read_chunk(data, true)
         .expect("read data!");
     assert_eq!(chunk, Chunk::Event(Event {
         typ: EventType::Word,
@@ -52,20 +53,11 @@ fn test_wave() {
         end: 4,
         name: None
     }));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
+		for _ in 0..4 {
+			(data, chunk) = read_chunk(data, true)
+					.expect("read data!");
+			assert_matches!(chunk, Chunk::Audio(_));
+		}
     let word_is = Chunk::Event(Event {
         typ: EventType::Word,
         start: 5,
@@ -102,148 +94,58 @@ fn test_wave() {
         end: 36,
         name: None
     });
+    (data, chunk) = read_chunk(data, true)
+        .expect("read data!");
     assert_eq!(chunk, word_is);
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
+		for _ in 0..3 {
+			(data, chunk) = read_chunk(data, true)
+					.expect("read data!");
+			assert_matches!(chunk, Chunk::Audio(_));
+		}
+    (data, chunk) = read_chunk(data, true)
         .expect("read data!");
     assert_matches!(chunk, word_is);
-    let (data, chunk) = read_chunk(data, true)
+    (data, chunk) = read_chunk(data, true)
         .expect("read data!");
     assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
+    (data, chunk) = read_chunk(data, true)
         .expect("read data!");
     assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
+    (data, chunk) = read_chunk(data, true)
         .expect("read data!");
     assert_matches!(chunk, word_a);
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
+		for _ in 0..6 {
+			(data, chunk) = read_chunk(data, true)
+					.expect("read data!");
+			assert_matches!(chunk, Chunk::Audio(_));
+		}
+    (data, chunk) = read_chunk(data, true)
         .expect("read data!");
     assert_matches!(chunk, word_test);
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
+		for _ in 0..6 {
+			(data, chunk) = read_chunk(data, true)
+					.expect("read data!");
+			assert_matches!(chunk, Chunk::Audio(_));
+		}
+    (data, chunk) = read_chunk(data, true)
         .expect("read data!");
     assert_matches!(chunk, word_using);
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
+		for _ in 0..14 {
+			(data, chunk) = read_chunk(data, true)
+					.expect("read data!");
+			assert_matches!(chunk, Chunk::Audio(_));
+		}
+    (data, chunk) = read_chunk(data, true)
         .expect("read data!");
     assert_matches!(chunk, word_using);
-    let (data, chunk) = read_chunk(data, true)
+    (data, chunk) = read_chunk(data, true)
         .expect("read data!");
     assert_matches!(chunk, word_spiel);
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    let (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
+		for _ in 0..10 {
+			(data, chunk) = read_chunk(data, true)
+					.expect("read data!");
+			assert_matches!(chunk, Chunk::Audio(_));
+		}
     assert_eq!(data, &[]);
 }
 
