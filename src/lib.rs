@@ -1,158 +1,34 @@
 #![deny(
     clippy::pedantic,
     clippy::all,
+    clippy::std_instead_of_core,
+    clippy::std_instead_of_alloc,
+    clippy::alloc_instead_of_core,
 )]
 
+#![no_std]
+
+mod protocol;
+pub use protocol::{
+    Chunk,
+    ChunkHold,
+    read_chunk,
+};
+
+#[cfg(feature = "std")]
+extern crate std;
+
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
 #[cfg(feature = "client")]
-pub mod proxy;
+pub mod client;
 
-use serde::{Serialize, Deserialize};
-use enumflags2::bitflags;
+#[cfg(feature = "reader")]
+pub mod reader;
 
-pub struct Reader {
-    header_read: bool,
-    buf: Vec<u8>,
-}
-impl Default for Reader {
-    fn default() -> Self {
-        Reader {
-            header_read: false,
-            buf: Vec::with_capacity(1024),
-        }
-    }
-}
-
-impl Reader {
-    pub fn consume_bytes(&mut self, ext: &[u8]) {
-        self.buf.extend_from_slice(ext);
-    }
-}
-
-
-#[test]
-fn test_wave() {
-    use assert_matches::assert_matches;
-    let mut data: &[u8] = include_bytes!("../test.wav");
-		let mut chunk = Chunk::Version("");
-    (data, chunk) = read_chunk(data, false)
-        .expect("read data!");
-    assert_eq!(chunk, Chunk::Version("0.01"));
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_eq!(chunk, Chunk::Event(Event {
-        typ: EventType::Sentence,
-        start: 0,
-        end: 0,
-        name: None
-    }));
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_eq!(chunk, Chunk::Event(Event {
-        typ: EventType::Word,
-        start: 0,
-        end: 4,
-        name: None
-    }));
-		for _ in 0..4 {
-			(data, chunk) = read_chunk(data, true)
-					.expect("read data!");
-			assert_matches!(chunk, Chunk::Audio(_));
-		}
-    let word_is = Chunk::Event(Event {
-        typ: EventType::Word,
-        start: 5,
-        end: 7,
-        name: None
-    });
-    let word_a = Chunk::Event(Event {
-        typ: EventType::Word,
-        start: 8,
-        end: 9,
-        name: None
-    });
-    let word_test = Chunk::Event(Event {
-        typ: EventType::Word,
-        start: 10,
-        end: 14,
-        name: None
-    });
-    let word_using = Chunk::Event(Event {
-        typ: EventType::Word,
-        start: 15,
-        end: 20,
-        name: None
-    });
-    let word_spiel = Chunk::Event(Event {
-        typ: EventType::Word,
-        start: 21,
-        end: 27,
-        name: None
-    });
-    let word_whaha = Chunk::Event(Event {
-        typ: EventType::Word,
-        start: 28,
-        end: 36,
-        name: None
-    });
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_eq!(chunk, word_is);
-		for _ in 0..3 {
-			(data, chunk) = read_chunk(data, true)
-					.expect("read data!");
-			assert_matches!(chunk, Chunk::Audio(_));
-		}
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, word_is);
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, word_a);
-		for _ in 0..6 {
-			(data, chunk) = read_chunk(data, true)
-					.expect("read data!");
-			assert_matches!(chunk, Chunk::Audio(_));
-		}
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, word_test);
-		for _ in 0..6 {
-			(data, chunk) = read_chunk(data, true)
-					.expect("read data!");
-			assert_matches!(chunk, Chunk::Audio(_));
-		}
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, word_using);
-		for _ in 0..14 {
-			(data, chunk) = read_chunk(data, true)
-					.expect("read data!");
-			assert_matches!(chunk, Chunk::Audio(_));
-		}
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, word_using);
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, word_spiel);
-		for _ in 0..10 {
-			(data, chunk) = read_chunk(data, true)
-					.expect("read data!");
-			assert_matches!(chunk, Chunk::Audio(_));
-		}
-    assert_eq!(data, &[]);
-}
-
-#[bitflags]
 #[repr(u64)]
-#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[derive(Clone, Copy, Debug)]
 /// A bitfield of potential voice features that can be advertised to consumers.
 pub enum VoiceFeature {
     /// Provider dispatches event when about to speak word.

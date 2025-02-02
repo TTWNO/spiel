@@ -12,6 +12,12 @@
 //! [Writing a client proxy]: https://dbus2.github.io/zbus/client.html
 //! [D-Bus standard interfaces]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces,
 use zbus::proxy;
+use alloc::{
+    vec,
+    string::String,
+    vec::Vec,
+};
+
 #[proxy(
 	interface = "org.freedesktop.Speech.Provider",
 )]
