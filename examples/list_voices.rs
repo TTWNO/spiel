@@ -1,5 +1,5 @@
 use zbus;
-use spiel::proxy::ProviderProxy;
+use spiel::client::ProviderProxy;
 use zbus::names::OwnedBusName;
 use std::error::Error;
 

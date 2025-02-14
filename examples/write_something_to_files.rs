@@ -1,7 +1,7 @@
 use zbus;
 use tokio::net::UnixStream;
 use tokio::io::ErrorKind;
-use spiel::proxy::ProviderProxy;
+use spiel::client::ProviderProxy;
 use zbus::names::OwnedBusName;
 use zbus::zvariant::Fd;
 use std::error::Error;

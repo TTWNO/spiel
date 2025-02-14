@@ -24,9 +24,6 @@ extern crate alloc;
 #[cfg(feature = "client")]
 pub mod client;
 
-#[cfg(feature = "reader")]
-pub mod reader;
-
 #[repr(u64)]
 #[derive(Clone, Copy, Debug)]
 /// A bitfield of potential voice features that can be advertised to consumers.

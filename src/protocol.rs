@@ -1,4 +1,7 @@
+//! Spiel protocol defenitions.
+
 use nom::{IResult,
+    Finish,
     error::{Error, ErrorKind},
     bytes::streaming::take,
     combinator::{map, map_res, flat_map},
@@ -6,7 +9,11 @@ use nom::{IResult,
     number::{streaming::u32, Endianness},
     multi::length_data,
 };
+use bytes::Buf;
+use core::task::Poll;
 use core::borrow::Borrow;
+use core::iter::once;
+use alloc::vec::Vec;
 
 #[test]
 fn test_version_string() {
@@ -95,10 +102,7 @@ impl<'a> Chunk<'a> {
 
 pub fn read_chunk(buf: &[u8], header_already_read: bool) -> IResult<&[u8], Chunk> {
 	if !header_already_read {
-		return map(
-			read_header,
-			|ver| Chunk::Version(ver),
-		).parse(buf);
+      return read_header(buf);
 	}
   let (data,ct) = read_chunk_type(buf)?;
   match ct {
@@ -115,12 +119,15 @@ fn read_chunk_size(buf: &[u8]) -> IResult<&[u8], u32> {
     // TODO: should this always be native? I'm pretty sure it dpeneds on the stream parameters?
     u32(Endianness::Native)(buf)
 }
-fn read_header(buf: &[u8]) -> IResult<&[u8], &str> {
-    map_res(
-        take(4usize),
-        |bytes: &[u8]| {
-            core::str::from_utf8(bytes)
-        }
+fn read_header(buf: &[u8]) -> IResult<&[u8], Chunk> {
+    map(
+        map_res(
+            take(4usize),
+            |bytes: &[u8]| {
+                core::str::from_utf8(bytes)
+            }
+        ),
+        |s| Chunk::Version(s)
     ).parse(buf)
 }
 fn read_chunk_type(buf: &[u8]) -> IResult<&[u8], ChunkType> {
@@ -176,6 +183,38 @@ fn read_chunk_event(buf: &[u8]) -> IResult<&[u8], Chunk> {
     |(typ,start,end,name)| Chunk::Event(Event {
         typ, start, end, name: if name.len() > 0 { Some(name) } else { None }
     })).parse(buf)
+}
+
+pub fn poll_read_chunk(buf: &[u8], read_header: bool) -> Poll<IResult<&[u8], Chunk<'_>>> {
+    match read_chunk(buf, read_header) {
+        Ok(buf_and_chunk) => Poll::Ready(Ok(buf_and_chunk)),
+        Err(e) => Poll::Ready(Err(e)),
+        Err(nom::Err::Incomplete(_)) => Poll::Pending,
+    }
+}
+
+#[derive(Default)]
+pub struct Reader {
+    header_done: bool,
+    buffer: bytes::BytesMut,
+}
+impl Reader {
+    fn push(&mut self, other: &[u8]) {
+        self.buffer.extend_from_slice(other)
+    }
+    fn try_read(&mut self) -> Result<Chunk<'_>, nom::Err<&[u8]>> {
+        let data = self.buffer.split().freeze();
+        let (new_buf, chunk) = match read_chunk(&data, self.header_done) {
+            Ok((new_buf, chunk)) => {
+                let size = data.len() - new_buf.len();
+                (bytes::BytesMut::from(new_buf.as_ref()), chunk)
+            },
+            _ => panic!(),
+        };
+        let size = self.buffer.len() - new_buf.len();
+        self.buffer.advance(size);
+        Ok(chunk)
+    }
 }
 
 #[test]
