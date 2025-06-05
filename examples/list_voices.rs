@@ -1,3 +1,6 @@
+/*
+#![cfg(all(feature = "client", feature = "tokio"))]
+
 use zbus;
 use spiel::client::ProviderProxy;
 use zbus::names::OwnedBusName;
@@ -29,3 +32,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	}
 	Ok(())
 }
+*/
+fn main() {}

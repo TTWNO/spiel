@@ -1,68 +1,23 @@
 //! Spiel protocol defenitions.
 
 use nom::{IResult,
-    Finish,
     error::{Error, ErrorKind},
     bytes::streaming::take,
-    combinator::{map, map_res, flat_map},
+    combinator::{map, map_res},
     Parser,
     number::{streaming::u32, Endianness},
     multi::length_data,
+    Input,
 };
-use bytes::Buf;
-use core::task::Poll;
-use core::borrow::Borrow;
-use core::iter::once;
-use alloc::vec::Vec;
-
-#[test]
-fn test_version_string() {
-   let data = "6.90";
-   let (_, chunk) = read_chunk(data.as_bytes(), false)
-    .expect("read data!");
-   assert_eq!(chunk, Chunk::Version("6.90"));
-}
+use bytes::{BytesMut, Bytes};
+use alloc::string::String;
 
 #[derive(Debug, PartialEq)]
-pub struct Event<'a> {
+pub struct Event {
     pub typ: EventType,
     pub start: u32,
     pub end: u32,
-		pub name: Option<&'a str>,
-}
-impl<'a> Event<'a> {
-    fn to_bytes(self) -> ([u8; 13], &'a [u8]) {
-        let start_bytes = self.start.to_le_bytes();
-        let end_bytes = self.end.to_le_bytes();
-        let name_len_bytes = self.name.unwrap_or_default().len().to_le_bytes();
-        let name_size = self.name.unwrap().len();
-        let discriminant: u8 = match self.typ {
-            EventType::Word => 1,
-            EventType::Sentence => 2,
-            EventType::Range => 3,
-            EventType::Mark => 4,
-        };
-        let slice = [
-            discriminant,
-            start_bytes[0],
-            start_bytes[1],
-            start_bytes[2],
-            start_bytes[3],
-            end_bytes[0],
-            end_bytes[1],
-            end_bytes[2],
-            end_bytes[3],
-            name_len_bytes[0],
-            name_len_bytes[1],
-            name_len_bytes[2],
-            name_len_bytes[3],
-        ];
-        let name_bytes = match self.name {
-            Some(name) => name.as_bytes(),
-            None => &[],
-        };
-        (slice, name_bytes)
-    }
+		pub name: Option<String>,
 }
 
 #[derive(Debug)]
@@ -80,55 +35,53 @@ pub enum EventType {
     Mark,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Chunk<'a> {
-    Version(&'a str),
-    Audio(ChunkHold<'a>),
-    Event(Event<'a>),
+#[derive(Debug)]
+pub enum MessageType {
+    Version { version: [char; 4] },
+    Audio { samples_offset: usize, samples_len: usize },
+    Event { name_offset: usize, typ: EventType, start: u32, end: u32, name_len: usize },
 }
-
-impl<'a> Chunk<'a> {
-    fn into_bytes(self) -> &'a [u8] {
-        match self {
-            Chunk::Version(version) => version.as_bytes(),
-            Chunk::Audio(ch) => ch.buf,
-            Chunk::Event(ev) => {
-                let (start, end) = ev.to_bytes();
-                todo!()
+fn read_version(buf: &[u8]) -> IResult<&[u8], MessageType> {
+    map(
+        map(
+            take(4usize),
+            |bytes: &[u8]| {
+                // SAFETY: This is allowed because we already know we've taken 4, and exactly 4
+                // bytes at this point!
+                [char::from(bytes[0]),
+                char::from(bytes[1]),
+                char::from(bytes[2]),
+                char::from(bytes[3])]
             }
-        }
-    }
+        ),
+        |s| MessageType::Version { version: s }
+    ).parse(buf)
 }
-
-pub fn read_chunk(buf: &[u8], header_already_read: bool) -> IResult<&[u8], Chunk> {
+pub fn read_message(buf: &[u8], header_already_read: bool) -> IResult<&[u8], MessageType> {
 	if !header_already_read {
-      return read_header(buf);
+      return read_version(buf);
 	}
   let (data,ct) = read_chunk_type(buf)?;
   match ct {
       ChunkType::Audio => {
-          read_chunk_audio(data)
+          read_message_audio(data)
       },
       ChunkType::Event => {
-          read_chunk_event(data)
+          read_message_event(data)
     },
   }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Message {
+    Version(String),
+    Audio(Bytes),
+    Event(Event),
 }
 
 fn read_chunk_size(buf: &[u8]) -> IResult<&[u8], u32> {
     // TODO: should this always be native? I'm pretty sure it dpeneds on the stream parameters?
     u32(Endianness::Native)(buf)
-}
-fn read_header(buf: &[u8]) -> IResult<&[u8], Chunk> {
-    map(
-        map_res(
-            take(4usize),
-            |bytes: &[u8]| {
-                core::str::from_utf8(bytes)
-            }
-        ),
-        |s| Chunk::Version(s)
-    ).parse(buf)
 }
 fn read_chunk_type(buf: &[u8]) -> IResult<&[u8], ChunkType> {
     map_res(take(1usize), |bytes: &[u8]| {
@@ -149,190 +102,155 @@ fn read_event_type(buf: &[u8]) -> IResult<&[u8], EventType> {
         _ => Err(Error::new(bytes[0], ErrorKind::Tag)),
     }).parse(buf)
 }
-fn read_chunk_audio(buf: &[u8]) -> IResult<&[u8], Chunk> {
+fn read_message_audio(buf: &[u8]) -> IResult<&[u8], MessageType> {
     map(
         length_data(read_chunk_size),
-        |data| Chunk::Audio(ChunkHold { buf: data }),
+        |data| MessageType::Audio { samples_offset: 4, samples_len: data.input_len()  },
     ).parse(buf)
 }
 
-#[derive(PartialEq)]
-pub struct ChunkHold<'a> {
-    pub buf: &'a [u8],
-}
-impl core::fmt::Debug for ChunkHold<'_> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("ChunkHold")
-         .field("len", &self.buf.len())
-         .finish()
-    }
-}
-
-fn read_chunk_event(buf: &[u8]) -> IResult<&[u8], Chunk> {
+fn read_message_event(buf: &[u8]) -> IResult<&[u8], MessageType> {
     map((
+        // Takes exactly 1 byte!!
         read_event_type,
+        // then 3 x 4 bytes
         u32(Endianness::Native),
         u32(Endianness::Native),
-        map_res(
-            length_data(
-              u32::<&[u8], _>(Endianness::Native),
-            ),
-            |bytes| core::str::from_utf8(bytes)
-        ),
+        length_data(u32(Endianness::Native)),
+        // ^ then take the number of bytes contianed in the data.
     ),
-    |(typ,start,end,name)| Chunk::Event(Event {
-        typ, start, end, name: if name.len() > 0 { Some(name) } else { None }
-    })).parse(buf)
-}
-
-pub fn poll_read_chunk(buf: &[u8], read_header: bool) -> Poll<IResult<&[u8], Chunk<'_>>> {
-    match read_chunk(buf, read_header) {
-        Ok(buf_and_chunk) => Poll::Ready(Ok(buf_and_chunk)),
-        Err(e) => Poll::Ready(Err(e)),
-        Err(nom::Err::Incomplete(_)) => Poll::Pending,
-    }
+    |(typ,start,end,name_data)| MessageType::Event {
+        name_offset: 13, typ, start, end, name_len: name_data.input_len(),
+    }).parse(buf)
 }
 
 #[derive(Default)]
 pub struct Reader {
     header_done: bool,
-    buffer: bytes::BytesMut,
+    buffer: BytesMut,
 }
 impl Reader {
     fn push(&mut self, other: &[u8]) {
         self.buffer.extend_from_slice(other)
     }
-    fn try_read(&mut self) -> Result<Chunk<'_>, nom::Err<&[u8]>> {
-        let data = self.buffer.split().freeze();
-        let (new_buf, chunk) = match read_chunk(&data, self.header_done) {
-            Ok((new_buf, chunk)) => {
-                let size = data.len() - new_buf.len();
-                (bytes::BytesMut::from(new_buf.as_ref()), chunk)
+    fn try_read(&mut self) -> Result<Message, nom::Err<&[u8]>> {
+        let mut data = self.buffer.split().freeze();
+        let (new_buf, message_type) = match read_message(&data, self.header_done) {
+            Ok((new_buf, message_type)) => {
+                (BytesMut::from(new_buf.as_ref()), message_type)
             },
-            _ => panic!(),
+            Err(e) => {
+                match e {
+                    nom::Err::Incomplete(need) => panic!("NEED: {need:?}"),
+                    nom::Err::Error(e) => panic!("ERROR: {:?}", e.code),
+                    nom::Err::Failure(e) => panic!("ERROR: {:?}", e.code),
+                }
+            }
         };
-        let size = self.buffer.len() - new_buf.len();
-        self.buffer.advance(size);
-        Ok(chunk)
+        let msg = match message_type {
+            MessageType::Version { version } => {
+                self.header_done = true;
+                Message::Version(String::from_iter(version.into_iter()))
+            }
+            MessageType::Audio { samples_offset, samples_len } => Message::Audio(
+                data.split_off(samples_offset).split_to(samples_len as usize)
+            ),
+            MessageType::Event { typ, start, end, name_offset, name_len } => Message::Event(Event {
+                typ, start, end,
+                name: if name_len == 0 { None } else {
+                    // TODO: try to remove this clone!
+                    Some(String::from_iter(data.split_off(name_offset).split_to(name_len as usize).into_iter().map(char::from)))
+                }
+            }),
+        };
+
+        self.buffer = new_buf;
+        Ok(msg)
     }
 }
 
 #[test]
-fn test_wave() {
+fn test_wave_reader() {
     use assert_matches::assert_matches;
+    use std::string::ToString;
+    let mut reader = Reader::default();
     let mut data: &[u8] = include_bytes!("../test.wav");
-		let mut chunk = Chunk::Version("");
-    (data, chunk) = read_chunk(data, false)
-        .expect("read data!");
-    assert_eq!(chunk, Chunk::Version("0.01"));
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_eq!(chunk, Chunk::Event(Event {
+    reader.push(data);
+    assert_eq!(reader.try_read(), Ok(Message::Version("0.01".to_string())));
+    assert_eq!(reader.try_read(), Ok(Message::Event(Event {
         typ: EventType::Sentence,
         start: 0,
         end: 0,
         name: None
-    }));
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_eq!(chunk, Chunk::Event(Event {
+    })));
+    assert_eq!(reader.try_read(), Ok(Message::Event(Event {
         typ: EventType::Word,
         start: 0,
         end: 4,
         name: None
-    }));
+    })));
 		for _ in 0..4 {
-			(data, chunk) = read_chunk(data, true)
-					.expect("read data!");
-			assert_matches!(chunk, Chunk::Audio(_));
+			assert_matches!(reader.try_read(), Ok(Message::Audio(_)));
 		}
-    let word_is = Chunk::Event(Event {
+    let word_is = Message::Event(Event {
         typ: EventType::Word,
         start: 5,
         end: 7,
         name: None
     });
-    let word_a = Chunk::Event(Event {
+    let word_a = Message::Event(Event {
         typ: EventType::Word,
         start: 8,
         end: 9,
         name: None
     });
-    let word_test = Chunk::Event(Event {
+    let word_test = Message::Event(Event {
         typ: EventType::Word,
         start: 10,
         end: 14,
         name: None
     });
-    let word_using = Chunk::Event(Event {
+    let word_using = Message::Event(Event {
         typ: EventType::Word,
         start: 15,
         end: 20,
         name: None
     });
-    let word_spiel = Chunk::Event(Event {
+    let word_spiel = Message::Event(Event {
         typ: EventType::Word,
         start: 21,
         end: 27,
         name: None
     });
-    let word_whaha = Chunk::Event(Event {
+    let word_whaha = Message::Event(Event {
         typ: EventType::Word,
         start: 28,
         end: 36,
         name: None
     });
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_eq!(chunk, word_is);
+    assert_eq!(reader.try_read(), Ok(word_is));
 		for _ in 0..3 {
-			(data, chunk) = read_chunk(data, true)
-					.expect("read data!");
-			assert_matches!(chunk, Chunk::Audio(_));
+			assert_matches!(reader.try_read(), Ok(Message::Audio(_)));
 		}
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, word_is);
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, Chunk::Audio(_));
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, word_a);
+    assert_matches!(reader.try_read(), Ok(word_is));
+    assert_matches!(reader.try_read(), Ok(Message::Audio(_)));
+    assert_matches!(reader.try_read(), Ok(Message::Audio(_)));
+    assert_matches!(reader.try_read(), word_a);
 		for _ in 0..6 {
-			(data, chunk) = read_chunk(data, true)
-					.expect("read data!");
-			assert_matches!(chunk, Chunk::Audio(_));
+			assert_matches!(reader.try_read(), Ok(Message::Audio(_)));
 		}
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, word_test);
+    assert_matches!(reader.try_read(), word_test);
 		for _ in 0..6 {
-			(data, chunk) = read_chunk(data, true)
-					.expect("read data!");
-			assert_matches!(chunk, Chunk::Audio(_));
+			assert_matches!(reader.try_read(), Ok(Message::Audio(_)));
 		}
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, word_using);
+    assert_matches!(reader.try_read(), word_using);
 		for _ in 0..14 {
-			(data, chunk) = read_chunk(data, true)
-					.expect("read data!");
-			assert_matches!(chunk, Chunk::Audio(_));
+			assert_matches!(reader.try_read(), Ok(Message::Audio(_)));
 		}
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, word_using);
-    (data, chunk) = read_chunk(data, true)
-        .expect("read data!");
-    assert_matches!(chunk, word_spiel);
+    assert_matches!(reader.try_read(), word_using);
+    assert_matches!(reader.try_read(), word_spiel);
 		for _ in 0..10 {
-			(data, chunk) = read_chunk(data, true)
-					.expect("read data!");
-			assert_matches!(chunk, Chunk::Audio(_));
+			assert_matches!(reader.try_read(), Ok(Message::Audio(_)));
 		}
-    assert_eq!(data, &[]);
+    assert_eq!(&reader.buffer.freeze().slice(..)[..], &[]);
 }

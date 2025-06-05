@@ -1,7 +1,7 @@
 use spiel::{
-    Chunk,
-    ChunkHold,
-    read_chunk,
+    Message,
+    MessageType,
+    read_message,
 };
 use hound::{
     WavWriter,
@@ -12,7 +12,8 @@ use itertools::Itertools;
 
 fn main() {
     let mut data: &[u8] = include_bytes!("../test.wav");
-    let mut chunk = Chunk::Version("no");
+    let mut data_next: &[u8] = &[0];
+    let mut msg = MessageType::Version { version: ['n', 'o', '\0', '\0'] };
     let mut header = false;
     let spec = WavSpec {
         channels: 1,
@@ -22,14 +23,16 @@ fn main() {
     };
     let mut writer = WavWriter::create("out.wav", spec).expect("Can make wave writer!");
     for _ in 0..55 {
-        (data, chunk) = read_chunk(data, header).expect("to be able to read data");
+        (data_next, msg) = read_message(data, header).expect("to be able to read data");
         header = true;
-        if let Chunk::Audio(ch) = chunk {
+        if let MessageType::Audio { samples_offset, samples_len } = msg {
+            let ch = &data[samples_offset..samples_len];
             println!("DATA: {:?}", ch);
-            for (l,h) in ch.buf.iter().tuples() {
+            for (l,h) in ch.iter().tuples() {
                 let sample = i16::from_le_bytes([*l,*h]);
                 writer.write_sample(sample).expect("Can write to file");
             }
         }
+        data = data_next;
     }
 }

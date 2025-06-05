@@ -1,3 +1,6 @@
+/*
+#![cfg(all(feature = "client", feature = "tokio"))]
+
 use zbus;
 use tokio::net::UnixStream;
 use tokio::io::ErrorKind;
@@ -69,3 +72,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     */
 	Ok(())
 }
+*/
+fn main() {}

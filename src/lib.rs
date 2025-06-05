@@ -10,9 +10,10 @@
 
 mod protocol;
 pub use protocol::{
-    Chunk,
-    ChunkHold,
-    read_chunk,
+    Event,
+    Message,
+    MessageType,
+    read_message,
 };
 
 #[cfg(feature = "std")]
