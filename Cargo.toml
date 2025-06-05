@@ -3,29 +3,52 @@ name = "spiel"
 version = "0.1.0"
 edition = "2021"
 license = "MIT or Apache-2.0"
+description = "A spiel format parser, client, and proxy implementation."
+repository = "https://github.com/TTWNO/spiel"
+categories = ["no-std::no-alloc", "parser-implementation", "multimedia::audio", "multimedia::encoding"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-client = ["dep:zbus", "alloc", "std"]
-reader = ["alloc"]
-smol = ["dep:futures-lite", "dep:pin-project"]
-tokio = []
-async-std = []
-std = []
-alloc = []
+default = []
+client = ["dep:zbus", "std"]
+reader = ["alloc", "dep:bytes"]
+std = ["alloc", "byteorder?/std"]
+alloc = ["serde?/alloc", "dep:bytes"]
+poll = []
+serde = ["serde/derive", "bytes?/serde"]
+byteorder = ["dep:byteorder"]
 
 [dependencies]
-assert_matches = { version = "1.5.0", default-features = false }
-bytes = { version = "1.9.0", default-features = false }
-futures-lite = { version = "2.6.0", default-features = false, optional = true }
+bytes = { version = "1.9.0", default-features = false, optional = true }
 nom = { version = "8.0.0", default-features = false }
-pin-project = { version = "1.1.8", default-features = false, optional = true }
-zbus = { version = "4.1.2", optional = true }
-zerocopy = { version = "0.8.17", default-features = false, features = ["derive", "zerocopy-derive"] }
+zbus = { version = "4.1.2", default-features = false, optional = true, features = ["async-io"] }
+serde = { version = "1.0", default-features = false, optional = true }
+byteorder = { version = "1.5.0", default-features = false, optional = true }
 
 [dev-dependencies]
-#tokio = { version = "1", default-features = false, features = ["macros", "rt-multi-thread","net","io-util"] }
-spiel = { path = ".", features = ["client"] }
+tokio = { version = "1", default-features = false, features = ["macros", "rt-multi-thread","net","io-util", "time"] }
+assert_matches = { version = "1.5.0", default-features = false }
+spiel = { path = ".", default-features = false }
 hound = "3.5.1"
 itertools = "0.14.0"
+
+[[example]]
+name = "filter_audio_data"
+path = "./examples/filter_audio_data.rs"
+required-features = []
+
+[[example]]
+name = "list_voices"
+path = "./examples/list_voices.rs"
+required-features = ["client"]
+
+[[example]]
+name = "write_to_file"
+path = "./examples/write_something_to_files.rs"
+required-features = ["client"]
+
+[[example]]
+name = "write_to_pipe"
+path = "./examples/write_something_to_pipe.rs"
+required-features = ["client"]
