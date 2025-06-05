@@ -11,16 +11,10 @@
 //!
 //! [Writing a client proxy]: https://dbus2.github.io/zbus/client.html
 //! [D-Bus standard interfaces]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces,
+use alloc::{string::String, vec, vec::Vec};
 use zbus::proxy;
-use alloc::{
-    vec,
-    string::String,
-    vec::Vec,
-};
 
-#[proxy(
-	interface = "org.freedesktop.Speech.Provider",
-)]
+#[proxy(interface = "org.freedesktop.Speech.Provider")]
 trait Provider {
     /// Synthesize method
     #[allow(clippy::too_many_arguments)]

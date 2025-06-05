@@ -3,18 +3,12 @@
     clippy::all,
     clippy::std_instead_of_core,
     clippy::std_instead_of_alloc,
-    clippy::alloc_instead_of_core,
+    clippy::alloc_instead_of_core
 )]
-
 #![no_std]
 
 mod protocol;
-pub use protocol::{
-    Event,
-    Message,
-    MessageType,
-    read_message,
-};
+pub use protocol::{read_message, Event, Message, MessageType, Reader};
 
 #[cfg(feature = "std")]
 extern crate std;
