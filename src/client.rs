@@ -11,8 +11,9 @@
 //!
 //! [Writing a client proxy]: https://dbus2.github.io/zbus/client.html
 //! [D-Bus standard interfaces]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces,
-use alloc::{string::String, vec, vec::Vec};
 use zbus::proxy;
+
+pub type Voice = (String, String, String, u64, Vec<String>);
 
 #[proxy(interface = "org.freedesktop.Speech.Provider")]
 trait Provider {
@@ -35,5 +36,5 @@ trait Provider {
 
     /// Voices property
     #[zbus(property)]
-    fn voices(&self) -> zbus::Result<Vec<(String, String, String, u64, Vec<String>)>>;
+    fn voices(&self) -> zbus::Result<Vec<Voice>>;
 }

@@ -5,13 +5,16 @@
     clippy::std_instead_of_alloc,
     clippy::alloc_instead_of_core
 )]
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 mod protocol;
-pub use protocol::{read_message, Event, Message, MessageType, Reader};
-
-#[cfg(feature = "std")]
-extern crate std;
+#[cfg(feature = "reader")]
+pub use protocol::Reader;
+#[cfg(feature = "poll")]
+pub use protocol::{poll_read_message_borrow, poll_read_message_type};
+pub use protocol::{read_message_borrow, read_message_type, MessageBorrow, MessageType};
+#[cfg(feature = "alloc")]
+pub use protocol::{Event, Message};
 
 #[cfg(feature = "alloc")]
 extern crate alloc;

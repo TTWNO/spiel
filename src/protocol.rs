@@ -1,7 +1,16 @@
 //! Spiel protocol defenitions.
 
+#[cfg(feature = "poll")]
+use core::task::Poll;
+
+#[cfg(feature = "alloc")]
 use alloc::string::String;
-use bytes::{Bytes, BytesMut};
+#[cfg(feature = "alloc")]
+use bytes::Bytes;
+#[cfg(feature = "reader")]
+use bytes::BytesMut;
+#[cfg(feature = "reader")]
+use nom::Needed;
 use nom::{
     bytes::streaming::take,
     combinator::{map, map_res},
@@ -10,8 +19,15 @@ use nom::{
     number::{streaming::u32, Endianness},
     IResult, Input, Parser,
 };
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "alloc")]
 #[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(
+    all(feature = "serde", feature = "alloc"),
+    derive(Serialize, Deserialize)
+)]
 pub struct Event {
     pub typ: EventType,
     pub start: u32,
@@ -19,7 +35,18 @@ pub struct Event {
     pub name: Option<String>,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct EventBorrow<'a> {
+    pub typ: EventType,
+    pub start: u32,
+    pub end: u32,
+    #[cfg_attr(feature = "serde", serde(borrow))]
+    pub name: Option<&'a str>,
+}
+
 #[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ChunkType {
     Event,
     Audio,
@@ -27,6 +54,7 @@ pub enum ChunkType {
 
 #[repr(u8)]
 #[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EventType {
     Word,
     Sentence,
@@ -35,6 +63,7 @@ pub enum EventType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum MessageType {
     Version {
         version: [char; 4],
@@ -54,6 +83,7 @@ pub enum MessageType {
         name_len: usize,
     },
 }
+
 fn read_version(buf: &[u8]) -> IResult<&[u8], MessageType> {
     map(
         map(take(4usize), |bytes: &[u8]| {
@@ -70,7 +100,24 @@ fn read_version(buf: &[u8]) -> IResult<&[u8], MessageType> {
     )
     .parse(buf)
 }
-pub fn read_message(buf: &[u8], header_already_read: bool) -> IResult<&[u8], MessageType> {
+
+fn read_version_borrow(buf: &[u8]) -> IResult<&[u8], MessageBorrow<'_>> {
+    map(
+        map_res(take(4usize), |bytes: &[u8]| str::from_utf8(&bytes[..4])),
+        MessageBorrow::Version,
+    )
+    .parse(buf)
+}
+/// `read_message` provides a method to _attempt_ to read Spiel messages from a buffer.
+/// See fields on [`MessageType`] to interpret the values that are returned in the happy-path case.
+/// It fails under any condition which `nom` will fail to parse, but that usually comes down to 2
+/// major cases:
+///
+/// # Errors
+///
+/// 1. Not enough data to parse a whole message (Error, recoverable, try again later)
+/// 2. Invalid data (Failure, this means completely unrecoverable)
+pub fn read_message_type(buf: &[u8], header_already_read: bool) -> IResult<&[u8], MessageType> {
     if !header_already_read {
         return read_version(buf);
     }
@@ -81,11 +128,94 @@ pub fn read_message(buf: &[u8], header_already_read: bool) -> IResult<&[u8], Mes
     }
 }
 
+/// `read_message_borrow` provides a method to _attempt_ to read Spiel messages from a buffer.
+/// See fields on [`MessageBorrow`] to interpret the values that are returned in the happy-path case.
+/// It fails under any condition which `nom` will fail to parse, but that usually comes down to 2
+/// major cases:
+///
+/// # Errors
+///
+/// 1. Not enough data to parse a whole message (Error, recoverable, try again later)
+/// 2. Invalid data (Failure, this means completely unrecoverable)
+pub fn read_message_borrow(
+    buf: &[u8],
+    header_already_read: bool,
+) -> IResult<&[u8], MessageBorrow<'_>> {
+    if !header_already_read {
+        return read_version_borrow(buf);
+    }
+    let (data, ct) = read_chunk_type(buf)?;
+    match ct {
+        ChunkType::Audio => read_message_borrow_audio(data),
+        ChunkType::Event => read_message_borrow_event(data),
+    }
+}
+
+/// `poll_read_message` provides a method to _attempt_ to read Spiel messages from a buffer, but
+/// mapped to a [`Poll`] type instead of a plain result.
+/// See fields on [`MessageType`] to interpret the values that are returned in the happy-path case.
+/// Unline [`read_message`], this fails under only one condition, and in the case not enough data has been provided, it will return [`Poll::Pending`].
+///
+/// # Errors
+///
+/// Invalid data was provided in the buffer.
+///
+#[cfg(feature = "poll")]
+#[allow(clippy::type_complexity)]
+pub fn poll_read_message_type(
+    buf: &[u8],
+    header_already_read: bool,
+) -> Poll<Result<(&[u8], MessageType), Error<&[u8]>>> {
+    match read_message_type(buf, header_already_read) {
+        Ok(happy_data) => Poll::Ready(Ok(happy_data)),
+        Err(nom::Err::Incomplete(_)) => Poll::Pending,
+        Err(nom::Err::Error(err) | nom::Err::Failure(err)) => Poll::Ready(Err(err)),
+    }
+}
+
+/// `poll_read_message_borrow` provides a method to _attempt_ to read Spiel messages from a buffer, but
+/// mapped to a [`Poll`] type instead of a plain result.
+/// See fields on [`MessageType`] to interpret the values that are returned in the happy-path case.
+/// Unline [`read_message_borrow`], this fails under only one condition, and in the case not enough data has been provided, it will return [`Poll::Pending`].
+///
+/// # Errors
+///
+/// Invalid data was provided in the buffer.
+///
+#[cfg(feature = "poll")]
+#[allow(clippy::type_complexity)]
+pub fn poll_read_message_borrow(
+    buf: &[u8],
+    header_already_read: bool,
+) -> Poll<Result<(&[u8], MessageBorrow<'_>), Error<&[u8]>>> {
+    match read_message_borrow(buf, header_already_read) {
+        Ok(happy_data) => Poll::Ready(Ok(happy_data)),
+        Err(nom::Err::Incomplete(_)) => Poll::Pending,
+        Err(nom::Err::Error(err) | nom::Err::Failure(err)) => Poll::Ready(Err(err)),
+    }
+}
+
+#[cfg(feature = "alloc")]
 #[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(
+    all(feature = "serde", feature = "alloc"),
+    derive(Serialize, Deserialize)
+)]
 pub enum Message {
     Version(String),
     Audio(Bytes),
     Event(Event),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum MessageBorrow<'a> {
+    #[cfg_attr(feature = "serde", serde(borrow))]
+    Version(&'a str),
+    #[cfg_attr(feature = "serde", serde(borrow))]
+    Audio(&'a [u8]),
+    #[cfg_attr(feature = "serde", serde(borrow))]
+    Event(EventBorrow<'a>),
 }
 
 fn read_chunk_size(buf: &[u8]) -> IResult<&[u8], u32> {
@@ -118,6 +248,9 @@ fn read_message_audio(buf: &[u8]) -> IResult<&[u8], MessageType> {
     })
     .parse(buf)
 }
+fn read_message_borrow_audio(buf: &[u8]) -> IResult<&[u8], MessageBorrow> {
+    map(length_data(read_chunk_size), MessageBorrow::Audio).parse(buf)
+}
 
 fn read_message_event(buf: &[u8]) -> IResult<&[u8], MessageType> {
     map(
@@ -140,38 +273,84 @@ fn read_message_event(buf: &[u8]) -> IResult<&[u8], MessageType> {
     )
     .parse(buf)
 }
+fn read_message_borrow_event(buf: &[u8]) -> IResult<&[u8], MessageBorrow<'_>> {
+    map(
+        (
+            // Takes exactly 1 byte!!
+            read_event_type,
+            // then 3 x 4 bytes
+            u32(Endianness::Native),
+            u32(Endianness::Native),
+            map_res(length_data(u32(Endianness::Native)), |bytes| {
+                str::from_utf8(bytes)
+            }),
+        ),
+        |(typ, start, end, name)| {
+            MessageBorrow::Event(EventBorrow {
+                typ,
+                start,
+                end,
+                name: if name.is_empty() { None } else { Some(name) },
+            })
+        },
+    )
+    .parse(buf)
+}
 
+#[cfg(feature = "reader")]
 #[derive(Default)]
+#[cfg_attr(
+    all(feature = "serde", feature = "alloc"),
+    derive(Serialize, Deserialize)
+)]
 pub struct Reader {
     header_done: bool,
     buffer: BytesMut,
 }
+#[cfg(feature = "reader")]
+#[derive(Debug, PartialEq, Eq)]
+/// TODO: Add `serde` support for this type!
+pub enum ParseError {
+    Needed(Needed),
+    Error(Error<Bytes>),
+    Failure(Error<Bytes>),
+}
+
+#[cfg(feature = "reader")]
 impl Reader {
     pub fn push(&mut self, other: &[u8]) {
-        self.buffer.extend_from_slice(other)
+        self.buffer.extend_from_slice(other);
     }
-    pub fn try_read(&mut self) -> Result<Message, nom::Err<&[u8]>> {
+    /// Attempt to read from the reader's internal buffer.
+    /// We further translate the data from [`MessageType`] into an owned [`Message`] for use.
+    ///
+    /// # Errors
+    ///
+    /// See [`read_message_type`] for failure cases.
+    pub fn try_read(&mut self) -> Result<Message, ParseError> {
         let mut data = self.buffer.split().freeze();
-        let (new_buf, message_type) = match read_message(&data, self.header_done) {
-            Ok((new_buf, message_type)) => (BytesMut::from(new_buf.as_ref()), message_type),
-            Err(e) => match e {
-                nom::Err::Incomplete(need) => panic!("NEED: {need:?}"),
-                nom::Err::Error(e) => panic!("ERROR: {:?}", e.code),
-                nom::Err::Failure(e) => panic!("ERROR: {:?}", e.code),
-            },
-        };
+        let (new_buf, message_type) = read_message_type(&data, self.header_done)
+            .map(|(nb, mt)| (BytesMut::from(nb), mt))
+            .map_err(|err| match err {
+                nom::Err::Incomplete(need) => ParseError::Needed(need),
+                nom::Err::Error(Error { input, code }) => ParseError::Error(Error {
+                    code,
+                    input: data.slice(input.as_ptr().addr() - data.as_ptr().addr()..),
+                }),
+                nom::Err::Failure(Error { input, code }) => ParseError::Failure(Error {
+                    code,
+                    input: data.slice(input.as_ptr().addr() - data.as_ptr().addr()..),
+                }),
+            })?;
         let msg = match message_type {
             MessageType::Version { version } => {
                 self.header_done = true;
-                Message::Version(String::from_iter(version.into_iter()))
+                Message::Version(version.into_iter().collect())
             }
             MessageType::Audio {
                 samples_offset,
                 samples_len,
-            } => Message::Audio(
-                data.split_off(samples_offset - 1)
-                    .split_to(samples_len as usize),
-            ),
+            } => Message::Audio(data.split_off(samples_offset - 1).split_to(samples_len)),
             MessageType::Event {
                 typ,
                 start,
@@ -186,12 +365,13 @@ impl Reader {
                     None
                 } else {
                     // TODO: try to remove this clone!
-                    Some(String::from_iter(
+                    Some(
                         data.split_off(name_offset - 1)
-                            .split_to(name_len as usize)
+                            .split_to(name_len)
                             .into_iter()
-                            .map(char::from),
-                    ))
+                            .map(char::from)
+                            .collect::<String>(),
+                    )
                 },
             }),
         };
@@ -201,10 +381,11 @@ impl Reader {
     }
 }
 
+#[cfg(feature = "reader")]
 #[test]
 fn test_wave_reader() {
+    use alloc::string::ToString;
     use assert_matches::assert_matches;
-    use std::string::ToString;
     let mut reader = Reader::default();
     let data: &[u8] = include_bytes!("../test.wav");
     reader.push(data);
