@@ -38,7 +38,12 @@ pub enum EventType {
 #[derive(Debug)]
 pub enum MessageType {
     Version { version: [char; 4] },
-    Audio { samples_offset: usize, samples_len: usize },
+    /// With this variant, you should then be able to:
+    Audio { 
+        /// The index to the start of the data slice where the audio begins.
+        samples_offset: usize,
+        /// This length of the slice you should take in order to grab the audio frame.
+        samples_len: usize },
     Event { name_offset: usize, typ: EventType, start: u32, end: u32, name_len: usize },
 }
 fn read_version(buf: &[u8]) -> IResult<&[u8], MessageType> {
@@ -105,7 +110,7 @@ fn read_event_type(buf: &[u8]) -> IResult<&[u8], EventType> {
 fn read_message_audio(buf: &[u8]) -> IResult<&[u8], MessageType> {
     map(
         length_data(read_chunk_size),
-        |data| MessageType::Audio { samples_offset: 4, samples_len: data.input_len()  },
+        |data| MessageType::Audio { samples_offset: 5, samples_len: data.input_len() },
     ).parse(buf)
 }
 
@@ -120,7 +125,7 @@ fn read_message_event(buf: &[u8]) -> IResult<&[u8], MessageType> {
         // ^ then take the number of bytes contianed in the data.
     ),
     |(typ,start,end,name_data)| MessageType::Event {
-        name_offset: 13, typ, start, end, name_len: name_data.input_len(),
+        name_offset: 14, typ, start, end, name_len: name_data.input_len(),
     }).parse(buf)
 }
 
@@ -153,13 +158,13 @@ impl Reader {
                 Message::Version(String::from_iter(version.into_iter()))
             }
             MessageType::Audio { samples_offset, samples_len } => Message::Audio(
-                data.split_off(samples_offset).split_to(samples_len as usize)
+                data.split_off(samples_offset - 1).split_to(samples_len as usize)
             ),
             MessageType::Event { typ, start, end, name_offset, name_len } => Message::Event(Event {
                 typ, start, end,
                 name: if name_len == 0 { None } else {
                     // TODO: try to remove this clone!
-                    Some(String::from_iter(data.split_off(name_offset).split_to(name_len as usize).into_iter().map(char::from)))
+                    Some(String::from_iter(data.split_off(name_offset - 1).split_to(name_len as usize).into_iter().map(char::from)))
                 }
             }),
         };
