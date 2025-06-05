@@ -3,7 +3,7 @@ name = "spiel"
 version = "0.1.0"
 edition = "2021"
 license = "MIT or Apache-2.0"
-description = "A spiel format parser, client, and proxy implementation."
+description = "A pure-Rust Spiel format parser, client, and proxy implementation."
 repository = "https://github.com/TTWNO/spiel"
 categories = ["no-std::no-alloc", "parser-implementation", "multimedia::audio", "multimedia::encoding"]
 
@@ -13,18 +13,16 @@ categories = ["no-std::no-alloc", "parser-implementation", "multimedia::audio", 
 default = []
 client = ["dep:zbus", "std"]
 reader = ["alloc", "dep:bytes"]
-std = ["alloc", "byteorder?/std"]
+std = ["alloc"]
 alloc = ["serde?/alloc", "dep:bytes"]
 poll = []
 serde = ["serde/derive", "bytes?/serde"]
-byteorder = ["dep:byteorder"]
 
 [dependencies]
 bytes = { version = "1.9.0", default-features = false, optional = true }
 nom = { version = "8.0.0", default-features = false }
 zbus = { version = "4.1.2", default-features = false, optional = true, features = ["async-io"] }
 serde = { version = "1.0", default-features = false, optional = true }
-byteorder = { version = "1.5.0", default-features = false, optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", default-features = false, features = ["macros", "rt-multi-thread","net","io-util", "time"] }

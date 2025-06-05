@@ -108,8 +108,42 @@ fn read_version_borrow(buf: &[u8]) -> IResult<&[u8], MessageBorrow<'_>> {
     )
     .parse(buf)
 }
-/// `read_message` provides a method to _attempt_ to read Spiel messages from a buffer.
+/// [`read_message_type`] provides a method to _attempt_ to read Spiel messages from a buffer.
 /// See fields on [`MessageType`] to interpret the values that are returned in the happy-path case.
+/// NOTE: you need to keep the buffer passed to this function alive in order to extract the audio
+/// buffer.
+///
+/// ```no_run
+/// use spiel::{
+///     read_message_type,
+///     MessageType,
+/// };
+/// use itertools::Itertools;
+/// // Just imagine that you have mutable data from somewhere; this obviously won't run!
+/// // See the [`filter_audio_data`] example to see how this is used in practice.
+/// let mut data: &[u8] = &[0u8];
+/// let mut header = false;
+/// while let Ok((data_next, msg)) = read_message_type(data, header) {
+///     header = true;
+///     if let MessageType::Audio {
+///         samples_offset,
+///         samples_len,
+///     } = msg
+///     {
+///         // NOTE: here is why the data must stay alive; `read_message_type` only gives you
+///         // enough data to _reference_ the correct slices. It does not get these slices for you.
+///         // If you want this functionality: receiving [`Message`] or [`MessageBorrow`]s
+///         // directly, you want [`spiel::Reader`].
+///         let ch = &data[samples_offset..samples_len];
+///         for (l, h) in ch.iter().tuples() {
+///             let sample = i16::from_le_bytes([*l, *h]);
+///             // write this sample to a file/pipe/etc.
+///         }
+///     }
+///     data = data_next;
+/// }
+/// ```
+///
 /// It fails under any condition which `nom` will fail to parse, but that usually comes down to 2
 /// major cases:
 ///
@@ -151,10 +185,10 @@ pub fn read_message_borrow(
     }
 }
 
-/// `poll_read_message` provides a method to _attempt_ to read Spiel messages from a buffer, but
+/// [`poll_read_message_type`] provides a method to _attempt_ to read Spiel messages from a buffer, but
 /// mapped to a [`Poll`] type instead of a plain result.
 /// See fields on [`MessageType`] to interpret the values that are returned in the happy-path case.
-/// Unline [`read_message`], this fails under only one condition, and in the case not enough data has been provided, it will return [`Poll::Pending`].
+/// Unlike [`read_message_type`], this fails under only one condition, and in the case not enough data has been provided, it will return [`Poll::Pending`].
 ///
 /// # Errors
 ///

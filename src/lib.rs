@@ -1,3 +1,4 @@
+#![doc = include_str!("../README.md")]
 #![deny(
     clippy::pedantic,
     clippy::all,
@@ -12,7 +13,9 @@ mod protocol;
 pub use protocol::Reader;
 #[cfg(feature = "poll")]
 pub use protocol::{poll_read_message_borrow, poll_read_message_type};
-pub use protocol::{read_message_borrow, read_message_type, MessageBorrow, MessageType};
+pub use protocol::{
+    read_message_borrow, read_message_type, EventBorrow, MessageBorrow, MessageType,
+};
 #[cfg(feature = "alloc")]
 pub use protocol::{Event, Message};
 
