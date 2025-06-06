@@ -166,11 +166,25 @@ pub struct Client<'a> {
 }
 
 impl Client<'_> {
+	/// Create a new Spiel client.
+	///
+	/// # Errors
+	///
+	/// Anything that causes the `DBus` connection to fail will be returned as an error.
+	/// You need an active session in order to complete this.
 	pub async fn new() -> Result<Self, zbus::Error> {
 		let con = Connection::session().await?;
 		let fdo = DBusProxy::new(&con).await?;
-		Ok(Client { fdo, con })
+		Ok(Client { con, fdo })
 	}
+	/// Get a list of speech providers.
+	///
+	/// # Errors
+	///
+	/// Any error that causes `DBus` to either be:
+	///
+	/// 1. Unable to query the session for activatable names, or
+	/// 2. Stops the creation of proxies pointing to a name ending in `Speech.Provider`.
 	pub async fn list_providers(&self) -> Result<Vec<ProviderProxy<'_>>, zbus::Error> {
 		let names =
 			self.fdo.list_activatable_names()
@@ -182,7 +196,7 @@ impl Client<'_> {
 			let proxy = ProviderProxy::new(
 				&self.con,
 				name.clone(),
-				format!("/{}", name.as_str().replace(".", "/")),
+				format!("/{}", name.as_str().replace('.', "/")),
 			)
 			.await?;
 			providers.push(proxy);

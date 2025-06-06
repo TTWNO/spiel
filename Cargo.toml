@@ -47,6 +47,11 @@ path = "./examples/list_voices.rs"
 required-features = ["client"]
 
 [[example]]
+name = "list_voices_with_client"
+path = "./examples/list_voices_client.rs"
+required-features = ["client"]
+
+[[example]]
 name = "write_to_file"
 path = "./examples/write_something_to_files.rs"
 required-features = ["client"]
