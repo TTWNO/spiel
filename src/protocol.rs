@@ -411,7 +411,7 @@ fn read_message_audio(buf: &[u8]) -> IResult<&[u8], MessageType> {
 	})
 	.parse(buf)
 }
-fn read_message_borrow_audio(buf: &[u8]) -> IResult<&[u8], MessageBorrow> {
+fn read_message_borrow_audio(buf: &[u8]) -> IResult<&[u8], MessageBorrow<'_>> {
 	map(length_data(read_chunk_size), MessageBorrow::Audio).parse(buf)
 }
 
