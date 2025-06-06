@@ -56,10 +56,21 @@ pub enum ChunkType {
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EventType {
-    Word,
-    Sentence,
-    Range,
-    Mark,
+    Word = 1,
+    Sentence = 2,
+    Range = 3,
+    Mark = 4,
+}
+
+impl EventType {
+    fn to_ne_bytes(&self) -> [u8; 1] {
+        match self {
+            EventType::Word => [1],
+            EventType::Sentence => [2],
+            EventType::Range => [3],
+            EventType::Mark => [4],
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -82,6 +93,34 @@ pub enum MessageType {
         end: u32,
         name_len: usize,
     },
+}
+
+impl MessageType {
+    /// Determine how many bytes are necessary in order to write this (and its accompanying data
+    /// slice) to a new buffer.
+    fn bin_length(&self) -> usize {
+        match self {
+            // +1 for null byte
+            // +1 for EventType::Event specifier
+            // +4 for name_offset as u32
+            MessageType::Event { name_len, .. } => name_len + 6,
+            // +1 for EventType::Audio specifier
+            // +4 for samples_offset as u32
+            // +4 for start as u32
+            // +4 for end as u32
+            MessageType::Audio { samples_len, .. } => samples_len + 15,
+            // 4 bytes for the version inforamtion; NO TERMINATING NULL BYTE!
+            MessageType::Version { .. } => 4,
+        }
+    }
+    /// Get the offset of the accompanying data in a buffer.
+    fn offset(&self) -> usize {
+        match self {
+            MessageType::Version { .. } => 0,
+            MessageType::Audio { samples_offset, .. } => *samples_offset,
+            MessageType::Event { name_offset, .. } => *name_offset,
+        }
+    }
 }
 
 fn read_version(buf: &[u8]) -> IResult<&[u8], MessageType> {
@@ -159,6 +198,110 @@ pub fn read_message_type(buf: &[u8], header_already_read: bool) -> IResult<&[u8]
     match ct {
         ChunkType::Audio => read_message_audio(data),
         ChunkType::Event => read_message_event(data),
+    }
+}
+
+pub enum WriteError {
+    NotEnoughSpaceInBuffer,
+    DataNotLongEnough,
+}
+
+/// [`write_message_type`] will attempt to write a message's type and its data to a byte strim.
+/// Returns the number of bytes written to the buffer upon success.
+///
+/// # Errors
+///
+/// - `data` buffer doesn't contain the data it's said to in `MessageType`
+/// - `buf` buffer isn't long enough to take all the data.
+///
+pub fn write_message_type(
+    mt: MessageType,
+    data: &[u8],
+    buf: &mut [u8],
+) -> Result<usize, WriteError> {
+    if mt.bin_length() > buf.len() {
+        return Err(WriteError::NotEnoughSpaceInBuffer);
+    }
+    if mt.offset() + mt.bin_length() > data.len() {
+        return Err(WriteError::DataNotLongEnough);
+    }
+    Ok(write_message_type_unchecked(mt, data, buf))
+}
+
+/// [`write_message_type_unchecked`] will write a message's type and its data to a byte stream.
+///
+/// # Returns
+///
+/// The number of bytes written.
+///
+/// # Panics
+///
+/// Panics if the space needed for writing the message is not large enough.
+/// Or if the data slice does not contain enough data at the requested offset.
+/// Use [`MessageType::bin_length`] to determine how long the buffer must be,
+/// and use [`MessageType::offset`] to determine where in the data slice the accompanying data
+/// should lie.
+///
+/// # SAFETY
+///
+/// Callers are required to either:
+///
+/// 1. Never give a partial `data` buffer (i.e., you may not continually pass
+///    an offet further into the buffer upon successive calls). You *must* pass the entire data buffer
+///    every time.
+/// 2. Modify the offsets in the [`MessageType::Audio`] and [`MessageType::Event`] variants to
+///    match the offsets read from the `data` buffer (the value returned from the function).
+///
+/// Use [`write_message_type`] if you want these failure cases handled for you.
+pub fn write_message_type_unchecked(mt: MessageType, data: &[u8], buf: &mut [u8]) -> usize {
+    match mt {
+        MessageType::Version { version } => {
+            let buf_first_4 = &mut buf[..4];
+            // We could also have gotten it from the underlying data slice. Either way.
+            let first_4_data = &[
+                version[0] as u8,
+                version[1] as u8,
+                version[2] as u8,
+                version[3] as u8,
+            ];
+            buf_first_4.copy_from_slice(first_4_data);
+            4
+        }
+        MessageType::Audio {
+            samples_offset,
+            samples_len,
+        } => {
+            buf[0] = 1;
+            let samp_writer = &mut buf[1..5];
+            #[allow(clippy::cast_possible_truncation)]
+            samp_writer.copy_from_slice(&(samples_len as u32).to_ne_bytes());
+            let data_reader = &data[(5 + samples_offset)..(samples_offset + samples_len + 5)];
+            let data_writer = &mut buf[5..(samples_len + 5)];
+            data_writer.copy_from_slice(data_reader);
+            5 + samples_len
+        }
+        MessageType::Event {
+            typ,
+            start,
+            end,
+            name_offset,
+            name_len,
+        } => {
+            buf[0] = 2;
+            let typ_write = &mut buf[1..2];
+            typ_write.copy_from_slice(&typ.to_ne_bytes());
+            let start_write = &mut buf[2..6];
+            start_write.copy_from_slice(&start.to_ne_bytes());
+            let end_write = &mut buf[6..10];
+            end_write.copy_from_slice(&end.to_ne_bytes());
+            let name_len_write = &mut buf[10..14];
+            #[allow(clippy::cast_possible_truncation)]
+            name_len_write.copy_from_slice(&(name_offset as u32).to_ne_bytes());
+            let name_write = &mut buf[14..(14 + name_len)];
+            let name_read = &data[name_offset..(name_len + name_offset)];
+            name_write.copy_from_slice(name_read);
+            14 + name_len
+        }
     }
 }
 
@@ -514,4 +657,81 @@ fn test_wave_reader() {
         assert_matches!(reader.try_read(), Ok(Message::Audio(_)));
     }
     assert_eq!(&reader.buffer.freeze().slice(..)[..], &[]);
+}
+
+#[test]
+fn test_read_write_version() {
+    let mt = MessageType::Version {
+        version: ['w', 'o', 'w', 'z'],
+    };
+    let data = &[0];
+    let buf = &mut [0; 1024];
+    let _offset = write_message_type_unchecked(mt.clone(), &data[..], &mut buf[..]);
+    let (_read_offset, mt2) = read_message_type(&buf[..], false).expect("Valid MessageType!");
+    assert_eq!(mt, mt2);
+}
+
+#[test]
+fn test_read_write_event() {
+    let mt_name = "WTF is this!?";
+    let name_offset = 14;
+    let mt = MessageType::Event {
+        typ: EventType::Word,
+        start: 872,
+        end: 99999,
+        name_offset,
+        // +1: terminating null byte
+        name_len: mt_name.len() + 1,
+    };
+    let data = &mut [0u8; 1024];
+    // No need to write this to the `data` buffer because we start with all 0s.
+    let data_writer = &mut data[14..(14 + mt_name.len())];
+    data_writer.copy_from_slice(mt_name.as_bytes());
+    let buf = &mut [0u8; 1024];
+    let _offset = write_message_type_unchecked(mt.clone(), &data[..], &mut buf[..]);
+    let (_read_offset, mt2) = read_message_type(&buf[..], true).expect("Valid MessageType!");
+    let MessageType::Event {
+        name_offset,
+        name_len,
+        ..
+    } = mt2.clone()
+    else {
+        assert_eq!(mt, mt2);
+        panic!();
+    };
+    // NOTE: the -1 is because the binary format requires the terminating null byte
+    assert_eq!(
+        &data[name_offset..(name_offset + name_len - 1)],
+        mt_name.as_bytes()
+    );
+    assert_eq!(mt, mt2);
+}
+
+#[test]
+fn test_read_write_audio() {
+    let samples = [123, 93, 87, 16, 15, 15, 15, 0, 0, 0, 0];
+    let samples_offset = 5;
+    let mt = MessageType::Audio {
+        samples_offset,
+        samples_len: samples.len(),
+    };
+    let data = &mut [0u8; 1024];
+    let data_writer = &mut data[5..(5 + samples.len())];
+    data_writer.copy_from_slice(&samples[..]);
+    let buf = &mut [0u8; 1024];
+    let _offset = write_message_type_unchecked(mt.clone(), &data[..], &mut buf[..]);
+    let (_read_offset, mt2) = read_message_type(&buf[..], true).expect("Valid MessageType!");
+    let MessageType::Audio {
+        samples_offset,
+        samples_len,
+    } = mt2.clone()
+    else {
+        assert_eq!(mt, mt2);
+        panic!();
+    };
+    assert_eq!(
+        &data[samples_offset..(samples_offset + samples_len)],
+        &samples
+    );
+    assert_eq!(mt, mt2);
 }

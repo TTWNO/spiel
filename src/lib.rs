@@ -14,7 +14,8 @@ pub use protocol::Reader;
 #[cfg(feature = "poll")]
 pub use protocol::{poll_read_message_borrow, poll_read_message_type};
 pub use protocol::{
-    read_message_borrow, read_message_type, EventBorrow, MessageBorrow, MessageType,
+    read_message_borrow, read_message_type, write_message_type, write_message_type_unchecked,
+    EventBorrow, MessageBorrow, MessageType,
 };
 #[cfg(feature = "alloc")]
 pub use protocol::{Event, Message};
