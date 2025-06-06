@@ -17,24 +17,24 @@ pub type Voice = (String, String, String, u64, Vec<String>);
 
 #[proxy(interface = "org.freedesktop.Speech.Provider")]
 trait Provider {
-    /// Synthesize method
-    #[allow(clippy::too_many_arguments)]
-    fn synthesize(
-        &self,
-        pipe_fd: zbus::zvariant::Fd<'_>,
-        text: &str,
-        voice_id: &str,
-        pitch: f64,
-        rate: f64,
-        is_ssml: bool,
-        language: &str,
-    ) -> zbus::Result<()>;
+	/// Synthesize method
+	#[allow(clippy::too_many_arguments)]
+	fn synthesize(
+		&self,
+		pipe_fd: zbus::zvariant::Fd<'_>,
+		text: &str,
+		voice_id: &str,
+		pitch: f64,
+		rate: f64,
+		is_ssml: bool,
+		language: &str,
+	) -> zbus::Result<()>;
 
-    /// Name property
-    #[zbus(property)]
-    fn name(&self) -> zbus::Result<String>;
+	/// Name property
+	#[zbus(property)]
+	fn name(&self) -> zbus::Result<String>;
 
-    /// Voices property
-    #[zbus(property)]
-    fn voices(&self) -> zbus::Result<Vec<Voice>>;
+	/// Voices property
+	#[zbus(property)]
+	fn voices(&self) -> zbus::Result<Vec<Voice>>;
 }
