@@ -7,24 +7,27 @@ description = "A pure-Rust Spiel format parser, client, and proxy implementation
 repository = "https://github.com/TTWNO/spiel"
 categories = ["no-std::no-alloc", "parser-implementations", "multimedia::audio", "multimedia::encoding"]
 rust-version = "1.87"
-includes = ["LICENSE-*", "README.md", "src/**/*"]
+include = ["LICENSE-*", "README.md", "src/**/*"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
 default = []
-client = ["dep:zbus", "std"]
+client = ["dep:zbus", "std", "serde", "dep:enumflags2", "dep:serde_repr"]
 reader = ["alloc", "dep:bytes"]
 std = ["alloc"]
 alloc = ["serde?/alloc", "dep:bytes"]
 poll = []
-serde = ["serde/derive", "bytes?/serde"]
+serde = ["serde/derive", "bytes?/serde", "enumflags2?/serde"]
 
 [dependencies]
 bytes = { version = "1.9.0", default-features = false, optional = true }
 nom = { version = "8.0.0", default-features = false }
-zbus = { version = "4.1.2", default-features = false, optional = true, features = ["async-io"] }
+zbus = { version = "5.0", default-features = false, optional = true, features = ["async-io"] }
 serde = { version = "1.0", default-features = false, optional = true }
+enumflags2 = { version = "0.7.11", default-features = false, optional = true }
+static_assertions = "1.1.0"
+serde_repr = { version = "0.1.20", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", default-features = false, features = ["macros", "rt-multi-thread","net","io-util", "time"] }

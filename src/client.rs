@@ -11,12 +11,115 @@
 //!
 //! [Writing a client proxy]: https://dbus2.github.io/zbus/client.html
 //! [D-Bus standard interfaces]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces,
+use enumflags2::{bitflags, BitFlag, BitFlags};
 use zbus::proxy;
 
-pub type Voice = (String, String, String, u64, Vec<String>);
+/// An individual voice feature.
+///
+/// Knowledge of [Speech Synthesis Markup Language
+/// (SSML)](https://www.w3.org/TR/speech-synthesis11/) may be useful.
+#[bitflags]
+#[derive(
+	Copy,
+	Clone,
+	Debug,
+	serde_repr::Serialize_repr,
+	serde_repr::Deserialize_repr,
+	Type,
+	PartialEq,
+	Eq,
+)]
+#[repr(u64)]
+pub enum VoiceFeature {
+	/// Send [`spiel::Event`] when starting/ending the speech within a word.
+	EventsWord,
+	/// Send [`spiel::Event`] when starting/ending the speech within a sentence.
+	EventsSentence,
+	/// Send [`spiel::Event`] when starting/ending the speech within a given range.
+	EventsRange,
+	/// Send [`spiel::Event`] when starting/ending the speech between an SSML `<mark>` tag.
+	EventsSSMLMark,
+	/// Will interpret `<say-as interpret-as="date">`
+	SSMLSayAsDate,
+	/// Will interpret `<say-as interpret-as="time">`
+	SSMLSayAsTime,
+	/// Will interpret `<say-as interpret-as="telephone">`
+	SSMLSayAsTelephone,
+	/// Will interpret `<say-as interpret-as="characters">` (or similar variant)
+	SSMLSayAsCharacters,
+	/// Will interpret `<say-as interpret-as="characters-glyphs">` (or similar variant)
+	SSMLSayAsCharactersGlyphs,
+	/// Will interpret `<say-as interpret-as="number" format="cardinal">` (or similar variant)
+	SSMLSayAsCaridnal,
+	/// Will interpret `<say-as interpret-as="number" format="currency">` (or similar variant)
+	SSMLSayAsCurrency,
+	/// Will interpret SSML [`<break .../>` commands](https://www.w3.org/TR/speech-synthesis11/#edef_break)
+	SSMLBreak,
+	/// Will interpret SSML [`<sub>...</sub>` commands](https://www.w3.org/TR/speech-synthesis11/#edef_sub)
+	SSMLSub,
+	/// Will interpret SSML [`<phoneme>...</phoneme>` commands](https://www.w3.org/TR/speech-synthesis11/#edef_phoneme)
+	SSMLPhoneme,
+	/// Will interpret SSML [`<emphasis>...</emphasis>` commands](https://www.w3.org/TR/speech-synthesis11/#edef_emphasis)
+	SSMLEmphasis,
+	/// Will interpret SSML [`<prosody>...</prosody>` commands](https://www.w3.org/TR/speech-synthesis11/#edef_prosody)
+	SSMLProsidy,
+	/// Will interpret SSML [`<p>...</p>` and `<s>...</s>` commands](https://www.w3.org/TR/speech-synthesis11/#edef_paragraph)
+	SSMLSentenceParagraph,
+	/// Will interpret SSML [`<token>...</token>` commands](https://www.w3.org/TR/speech-synthesis11/#edef_token)
+	SSMLToken,
+}
+
+static_assertions::assert_impl_all!(VoiceFeature: BitFlag, Type);
+
+use zbus::zvariant::{Structure, Type, Value};
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Type, serde::Serialize, serde::Deserialize)]
+#[repr(transparent)]
+#[serde(transparent)]
+pub struct VoiceFeatureSet(BitFlags<VoiceFeature>);
+
+impl TryFrom<Value<'_>> for VoiceFeatureSet {
+	type Error = zbus::zvariant::Error;
+	fn try_from(zv: Value<'_>) -> Result<Self, Self::Error> {
+		Ok(VoiceFeatureSet(BitFlags::from_bits_truncate(TryInto::<u64>::try_into(zv)?)))
+	}
+}
+impl<'a> From<VoiceFeatureSet> for Structure<'a> {
+	fn from(vfs: VoiceFeatureSet) -> Structure<'a> {
+		Structure::from((vfs.0.bits(),))
+	}
+}
+
+/// All the information about a voice, including its audio output format, capabilities, and a
+/// string-based unique ID in order to reference it.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Value, Type, PartialEq, Eq)]
+#[zvariant(signature = "ssstas")]
+pub struct Voice {
+	/// A human-readable name.
+	name: String,
+	/// A unique identifier for calling [`ProviderProxy::synthesize`].
+	id: String,
+	/// A MIME followed by audio format information in GStreamer-Caps style, e.g.:
+	///
+	/// - `audio/x-raw,format=S32LE,channels=2,rate=22050`
+	///     - Format: PCM, signed 32-bit little-endian
+	///     - Channels: 2
+	///     - Sample rate: 22050
+	/// - `audio/x-spiel,format=S16LE,channels=1,rate=22050`
+	///     - Format: [Spiel (mixed audio/events)](`crate::Message`) signed 16-bit little-endian
+	///     - Channels: 1
+	///     - Sample rate: 22050
+	///
+	/// It is up to the caller to determine what to do with this string.
+	mime_format: String,
+	/// Bitflag of [`VoiceFeatures`].
+	features: VoiceFeatureSet,
+	/// A list of BCP 47 tags.
+	languages: Vec<String>,
+}
 
 #[proxy(interface = "org.freedesktop.Speech.Provider")]
-trait Provider {
+pub trait Provider {
 	/// Synthesize method
 	#[allow(clippy::too_many_arguments)]
 	fn synthesize(
@@ -37,4 +140,20 @@ trait Provider {
 	/// Voices property
 	#[zbus(property)]
 	fn voices(&self) -> zbus::Result<Vec<Voice>>;
+}
+
+#[test]
+fn serialize_deserialize_dbus() {
+	use zbus::zvariant::{serialized::Context, to_bytes, LE};
+	let voice = Voice {
+		name: "eSpeak".to_string(),
+		id: "espeak-ng".to_string(),
+		mime_format: "audio/x-raw,format=S16LE,channels=1,rate=11520".to_string(),
+		languages: vec!["en-GB".to_string(), "en-US".to_string(), "zh-TW".to_string()],
+		features: VoiceFeatureSet(VoiceFeature::EventsWord | VoiceFeature::SSMLSub),
+	};
+	let ctxt = Context::new_dbus(LE, 0);
+	let encoded = to_bytes(ctxt, &voice).unwrap();
+	let (voice2, _decoded) = encoded.deserialize::<Voice>().unwrap();
+	assert_eq!(voice, voice2);
 }
