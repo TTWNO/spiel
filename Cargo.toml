@@ -2,7 +2,7 @@
 name = "spiel"
 version = "0.1.0"
 edition = "2021"
-license = "MIT or Apache-2.0"
+license = "MIT OR Apache-2.0"
 description = "A pure-Rust Spiel format parser, client, and proxy implementation."
 repository = "https://github.com/TTWNO/spiel"
 categories = ["no-std::no-alloc", "parser-implementation", "multimedia::audio", "multimedia::encoding"]
