@@ -5,7 +5,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "A pure-Rust Spiel format parser, client, and proxy implementation."
 repository = "https://github.com/TTWNO/spiel"
-categories = ["no-std::no-alloc", "parser-implementation", "multimedia::audio", "multimedia::encoding"]
+categories = ["no-std::no-alloc", "parser-implementations", "multimedia::audio", "multimedia::encoding"]
 rust-version = "1.87"
 includes = ["LICENSE-*", "README.md", "src/**/*"]
 
