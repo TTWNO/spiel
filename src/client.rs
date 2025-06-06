@@ -96,9 +96,9 @@ impl<'a> From<VoiceFeatureSet> for Structure<'a> {
 #[zvariant(signature = "ssstas")]
 pub struct Voice {
 	/// A human-readable name.
-	name: String,
+	pub name: String,
 	/// A unique identifier for calling [`ProviderProxy::synthesize`].
-	id: String,
+	pub id: String,
 	/// A MIME followed by audio format information in GStreamer-Caps style, e.g.:
 	///
 	/// - `audio/x-raw,format=S32LE,channels=2,rate=22050`
@@ -111,11 +111,11 @@ pub struct Voice {
 	///     - Sample rate: 22050
 	///
 	/// It is up to the caller to determine what to do with this string.
-	mime_format: String,
+	pub mime_format: String,
 	/// Bitflag of [`VoiceFeatures`].
-	features: VoiceFeatureSet,
+	pub features: VoiceFeatureSet,
 	/// A list of BCP 47 tags.
-	languages: Vec<String>,
+	pub languages: Vec<String>,
 }
 
 #[proxy(interface = "org.freedesktop.Speech.Provider")]
@@ -156,4 +156,37 @@ fn serialize_deserialize_dbus() {
 	let encoded = to_bytes(ctxt, &voice).unwrap();
 	let (voice2, _decoded) = encoded.deserialize::<Voice>().unwrap();
 	assert_eq!(voice, voice2);
+}
+
+use zbus::{fdo::DBusProxy, Connection};
+
+pub struct Client<'a> {
+	con: Connection,
+	fdo: DBusProxy<'a>,
+}
+
+impl Client<'_> {
+	pub async fn new() -> Result<Self, zbus::Error> {
+		let con = Connection::session().await?;
+		let fdo = DBusProxy::new(&con).await?;
+		Ok(Client { fdo, con })
+	}
+	pub async fn list_providers(&self) -> Result<Vec<ProviderProxy<'_>>, zbus::Error> {
+		let names =
+			self.fdo.list_activatable_names()
+				.await?
+				.into_iter()
+				.filter(|name| name.contains("Speech.Provider"));
+		let mut providers = Vec::new();
+		for name in names {
+			let proxy = ProviderProxy::new(
+				&self.con,
+				name.clone(),
+				format!("/{}", name.as_str().replace(".", "/")),
+			)
+			.await?;
+			providers.push(proxy);
+		}
+		Ok(providers)
+	}
 }
