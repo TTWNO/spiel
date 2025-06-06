@@ -15,6 +15,14 @@ Note that features with an unmarked checkbox are not yet implemented.
 - [X] `serde`: activate [`serde::Serialize`] and [`serde::Deserialize`] on all types.
 - [ ] `provider`: activates [`std`] and pulls in the [`zbus`](https://crates.io/crates/zbus) crate. This will provide the `SpeechProvider` struct, which can be used to provide speech over the Spiel protocol via `DBus`.
 
+## MSRV
+
+With no features enabled, our only dependency is `nom`.
+This gives us an official MSRV of `1.65`.
+If `nom` increases their MSRV, we will too.
+
+With other features, YMMV.
+
 ## License
 
 All contributions are dual-licensed under MIT or Apache-2.0.
