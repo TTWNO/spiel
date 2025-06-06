@@ -17,9 +17,7 @@ Note that features with an unmarked checkbox are not yet implemented.
 
 ## MSRV
 
-With no features enabled, our only dependency is `nom`.
-This gives us an official MSRV of `1.65`.
-If `nom` increases their MSRV, we will too.
+We use the [`str::from_utf8`] which was introduced in Rust `1.87`; with no features enabled, this is our MSRV.
 
 With other features, YMMV.
 
