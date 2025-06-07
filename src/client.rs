@@ -11,7 +11,8 @@
 //!
 //! [Writing a client proxy]: https://dbus2.github.io/zbus/client.html
 //! [D-Bus standard interfaces]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces,
-use enumflags2::{bitflags, BitFlag, BitFlags};
+
+use enumflags2::{bitflags, BitFlags};
 use zbus::proxy;
 
 /// An individual voice feature.
@@ -31,13 +32,13 @@ use zbus::proxy;
 )]
 #[repr(u64)]
 pub enum VoiceFeature {
-	/// Send [`spiel::Event`] when starting/ending the speech within a word.
+	/// Send [`crate::Event`] when starting/ending the speech within a word.
 	EventsWord,
-	/// Send [`spiel::Event`] when starting/ending the speech within a sentence.
+	/// Send [`crate::Event`] when starting/ending the speech within a sentence.
 	EventsSentence,
-	/// Send [`spiel::Event`] when starting/ending the speech within a given range.
+	/// Send [`crate::Event`] when starting/ending the speech within a given range.
 	EventsRange,
-	/// Send [`spiel::Event`] when starting/ending the speech between an SSML `<mark>` tag.
+	/// Send [`crate::Event`] when starting/ending the speech between an SSML `<mark>` tag.
 	EventsSSMLMark,
 	/// Will interpret `<say-as interpret-as="date">`
 	SSMLSayAsDate,
@@ -69,8 +70,6 @@ pub enum VoiceFeature {
 	SSMLToken,
 }
 
-static_assertions::assert_impl_all!(VoiceFeature: BitFlag, Type);
-
 use zbus::zvariant::{Structure, Type, Value};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Type, serde::Serialize, serde::Deserialize)]
@@ -84,11 +83,17 @@ impl TryFrom<Value<'_>> for VoiceFeatureSet {
 		Ok(VoiceFeatureSet(BitFlags::from_bits_truncate(TryInto::<u64>::try_into(zv)?)))
 	}
 }
+
 impl<'a> From<VoiceFeatureSet> for Structure<'a> {
 	fn from(vfs: VoiceFeatureSet) -> Structure<'a> {
 		Structure::from((vfs.0.bits(),))
 	}
 }
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Value, Type, PartialEq, Eq)]
+#[serde(transparent)]
+#[repr(transparent)]
+pub struct VoiceList(Vec<Voice>);
 
 /// All the information about a voice, including its audio output format, capabilities, and a
 /// string-based unique ID in order to reference it.
@@ -112,7 +117,7 @@ pub struct Voice {
 	///
 	/// It is up to the caller to determine what to do with this string.
 	pub mime_format: String,
-	/// Bitflag of [`VoiceFeatures`].
+	/// Bitflag of [`VoiceFeature`].
 	pub features: VoiceFeatureSet,
 	/// A list of BCP 47 tags.
 	pub languages: Vec<String>,

@@ -22,11 +22,9 @@ serde = ["serde/derive", "bytes?/serde", "enumflags2?/serde"]
 
 [dependencies]
 bytes = { version = "1.9.0", default-features = false, optional = true }
-nom = { version = "8.0.0", default-features = false }
 zbus = { version = "5.0", default-features = false, optional = true, features = ["async-io"] }
 serde = { version = "1.0", default-features = false, optional = true }
 enumflags2 = { version = "0.7.11", default-features = false, optional = true }
-static_assertions = "1.1.0"
 serde_repr = { version = "0.1.20", optional = true }
 
 [dev-dependencies]
@@ -35,6 +33,7 @@ assert_matches = { version = "1.5.0", default-features = false }
 spiel = { path = ".", default-features = false }
 hound = "3.5.1"
 itertools = "0.14.0"
+proptest = { version = "1.6.0", default-features = false, features = ["std", "attr-macro"] }
 
 [[example]]
 name = "filter_audio_data"
