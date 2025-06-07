@@ -8,11 +8,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	let providers = client.list_providers().await?;
 	for provider in providers {
 		let pname = provider.name().await?;
-		print!("{pname} provides: ");
-		let mut names: Vec<_> =
-			provider.voices().await?.into_iter().map(|voice| voice.name).collect();
-		names.sort();
-		println!("{names:?}");
+		println!("Provider: {pname}");
+		for voice in provider.voices().await? {
+			println!("\t{}", voice.name);
+			for lang in voice.languages {
+				println!("\t\t{lang}");
+			}
+		}
 	}
 	Ok(())
 }
