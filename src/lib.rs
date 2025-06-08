@@ -6,7 +6,8 @@
 	clippy::std_instead_of_alloc,
 	clippy::alloc_instead_of_core,
 	clippy::print_stdout,
-	clippy::print_stderr
+	clippy::print_stderr,
+	clippy::unwrap_used
 )]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 

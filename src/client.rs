@@ -173,8 +173,10 @@ fn serialize_deserialize_dbus() {
 		features: VoiceFeatureSet(VoiceFeature::EventsWord | VoiceFeature::SSMLSub),
 	};
 	let ctxt = Context::new_dbus(LE, 0);
-	let encoded = to_bytes(ctxt, &voice).unwrap();
-	let (voice2, _decoded) = encoded.deserialize::<Voice>().unwrap();
+	let encoded = to_bytes(ctxt, &voice).expect("Unable to serialize over DBus");
+	let (voice2, _decoded) = encoded
+		.deserialize::<Voice>()
+		.expect("Unable to deserialzie from DBus data");
 	assert_eq!(voice, voice2);
 }
 
