@@ -70,12 +70,19 @@ pub enum VoiceFeature {
 	SSMLToken,
 }
 
-use zbus::zvariant::{Structure, Type, Value};
+use zbus::zvariant::{Type, Value};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Type, serde::Serialize, serde::Deserialize)]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct VoiceFeatureSet(BitFlags<VoiceFeature>);
+
+impl VoiceFeatureSet {
+	#[must_use]
+	pub fn empty() -> Self {
+		VoiceFeatureSet(BitFlags::<VoiceFeature>::EMPTY)
+	}
+}
 
 impl TryFrom<Value<'_>> for VoiceFeatureSet {
 	type Error = zbus::zvariant::Error;
@@ -84,20 +91,14 @@ impl TryFrom<Value<'_>> for VoiceFeatureSet {
 	}
 }
 
-impl<'a> From<VoiceFeatureSet> for Structure<'a> {
-	fn from(vfs: VoiceFeatureSet) -> Structure<'a> {
-		Structure::from((vfs.0.bits(),))
-	}
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Value, Type, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Type, PartialEq, Eq)]
 #[serde(transparent)]
 #[repr(transparent)]
 pub struct VoiceList(Vec<Voice>);
 
 /// All the information about a voice, including its audio output format, capabilities, and a
 /// string-based unique ID in order to reference it.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Value, Type, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Type, PartialEq, Eq)]
 #[zvariant(signature = "ssstas")]
 pub struct Voice {
 	/// A human-readable name.
@@ -121,6 +122,20 @@ pub struct Voice {
 	pub features: VoiceFeatureSet,
 	/// A list of BCP 47 tags.
 	pub languages: Vec<String>,
+}
+
+impl TryFrom<Value<'_>> for Voice {
+	type Error = zbus::zvariant::Error;
+	fn try_from(zv: Value<'_>) -> Result<Self, Self::Error> {
+		let (name, id, mime_format, features, languages) = zv.try_into()?;
+		Ok(Voice { name, id, mime_format, features, languages })
+	}
+}
+impl From<Voice> for Value<'_> {
+	fn from(voice: Voice) -> Self {
+		let Voice { name, id, mime_format, features, languages } = voice;
+		(name, id, mime_format, features.0.bits(), languages).into()
+	}
 }
 
 #[proxy(interface = "org.freedesktop.Speech.Provider")]
@@ -192,10 +207,11 @@ impl Client<'_> {
 	/// 2. Stops the creation of proxies pointing to a name ending in `Speech.Provider`.
 	pub async fn list_providers(&self) -> Result<Vec<ProviderProxy<'_>>, zbus::Error> {
 		let names =
-			self.fdo.list_activatable_names()
+			self.fdo.list_names()
 				.await?
 				.into_iter()
-				.filter(|name| name.contains("Speech.Provider"));
+				.inspect(|name| println!("{name:?}"))
+				.filter(|name| name.ends_with("Speech.Provider"));
 		let mut providers = Vec::new();
 		for name in names {
 			let proxy = ProviderProxy::new(
