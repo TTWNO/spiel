@@ -4,7 +4,9 @@
 	clippy::all,
 	clippy::std_instead_of_core,
 	clippy::std_instead_of_alloc,
-	clippy::alloc_instead_of_core
+	clippy::alloc_instead_of_core,
+	clippy::print_stdout,
+	clippy::print_stderr
 )]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 

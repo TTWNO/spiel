@@ -210,8 +210,7 @@ impl Client<'_> {
 			self.fdo.list_names()
 				.await?
 				.into_iter()
-				.inspect(|name| println!("{name:?}"))
-				.filter(|name| name.ends_with("Speech.Provider"));
+				.filter(|name| name.ends_with(".Speech.Provider"));
 		let mut providers = Vec::new();
 		for name in names {
 			let proxy = ProviderProxy::new(
