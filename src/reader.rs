@@ -28,6 +28,12 @@ impl Reader {
 	}
 }
 
+impl From<Vec<u8>> for Reader {
+	fn from(buf: Vec<u8>) -> Self {
+		Reader { header_done: false, buffer: BytesMut::from(&buf[..]) }
+	}
+}
+
 impl Reader {
 	pub fn push(&mut self, other: &[u8]) {
 		self.buffer.extend_from_slice(other);
@@ -45,8 +51,13 @@ impl Reader {
 
 		let msg = match message_type {
 			MessageType::Version { version } => {
+				println!("VER-IN: {version:?}");
 				self.header_done = true;
-				MessageOwned::Version(version.into_iter().collect())
+				MessageOwned::Version(
+					str::from_utf8(&version[..])
+						.map_err(Error::Utf8)?
+						.to_string(),
+				)
 			}
 			MessageType::Audio { samples_offset, samples_len } => MessageOwned::Audio(
 				data.split_off(samples_offset - 1).split_to(samples_len),

@@ -36,3 +36,11 @@ pub use client::{Client, Voice, VoiceFeatureSet};
 pub mod reader;
 #[cfg(feature = "reader")]
 pub use reader::Reader;
+
+#[cfg(test)]
+pub mod proptests;
+
+#[cfg(feature = "std")]
+pub mod writer;
+#[cfg(feature = "std")]
+pub use writer::Writer;

@@ -6,6 +6,42 @@ use alloc::{string::String, string::ToString};
 use core::task::Poll;
 use core::{fmt, str::Utf8Error};
 
+impl<'a> Message<'a> {
+	/// Serializes the message into a Vec<u8> in the same binary format as the reader expects.
+	#[cfg(feature = "alloc")]
+	pub fn to_bytes(&self) -> alloc::vec::Vec<u8> {
+		match self {
+			Message::Version(version) => {
+				let mut buf = alloc::vec::Vec::with_capacity(4);
+				buf.extend_from_slice(version.as_bytes());
+				buf
+			}
+			Message::Audio(samples) => {
+				let mut buf = alloc::vec::Vec::with_capacity(1 + 4 + samples.len());
+				buf.push(1); // ChunkType::Audio
+				let len = samples.len() as u32;
+				buf.extend_from_slice(&len.to_ne_bytes());
+				buf.extend_from_slice(samples);
+				buf
+			}
+			Message::Event(ev) => {
+				let name_bytes = ev.name.map_or(&[][..], |n| n.as_bytes());
+				let name_len = name_bytes.len() as u32;
+				let mut buf = alloc::vec::Vec::with_capacity(
+					1 + 1 + 4 + 4 + 4 + name_bytes.len(),
+				);
+				buf.push(2); // ChunkType::Event
+				buf.push(ev.typ as u8);
+				buf.extend_from_slice(&ev.start.to_ne_bytes());
+				buf.extend_from_slice(&ev.end.to_ne_bytes());
+				buf.extend_from_slice(&name_len.to_ne_bytes());
+				buf.extend_from_slice(name_bytes);
+				buf
+			}
+		}
+	}
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum Error {
 	/// Reader does not have enough bytes to complete its read.
@@ -81,7 +117,8 @@ pub struct Event<'a> {
 	pub name: Option<&'a str>,
 }
 
-#[derive(Debug)]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ChunkType {
 	Event,
@@ -120,7 +157,7 @@ fn read_version_type(buf: &[u8]) -> Result<(usize, MessageType), Error> {
 		return Err(Error::NotEnoughBytes(4 - buf.len()));
 	}
 	let buf_4: &[u8; 4] = &buf[..4].try_into().expect("Exactly 4 bytes");
-	Ok((4, MessageType::Version { version: buf_4.map(char::from) }))
+	Ok((4, MessageType::Version { version: *buf_4 }))
 }
 
 /// [`read_message`] takes a buffer and triees to read a [`Message`] from it.
@@ -439,7 +476,7 @@ pub fn write_message(mt: &Message, buf: &mut [u8]) -> Result<usize, Error> {
 /// Mostly, you should use [`Message`] instead.
 pub enum MessageType {
 	Version {
-		version: [char; 4],
+		version: [u8; 4],
 	},
 	/// With this variant, you should then be able to:
 	Audio {
