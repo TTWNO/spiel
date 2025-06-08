@@ -68,4 +68,4 @@ required-features = ["client"]
 [[example]]
 name = "test_provider"
 path = "./examples/test_provider.rs"
-required-features = ["client"]
+required-features = ["client", "reader"]
