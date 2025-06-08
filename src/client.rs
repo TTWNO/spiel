@@ -11,7 +11,8 @@
 //!
 //! [Writing a client proxy]: https://dbus2.github.io/zbus/client.html
 //! [D-Bus standard interfaces]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces,
-use enumflags2::{bitflags, BitFlag, BitFlags};
+
+use enumflags2::{bitflags, BitFlags};
 use zbus::proxy;
 
 /// An individual voice feature.
@@ -31,13 +32,13 @@ use zbus::proxy;
 )]
 #[repr(u64)]
 pub enum VoiceFeature {
-	/// Send [`spiel::Event`] when starting/ending the speech within a word.
+	/// Send [`crate::Event`] when starting/ending the speech within a word.
 	EventsWord,
-	/// Send [`spiel::Event`] when starting/ending the speech within a sentence.
+	/// Send [`crate::Event`] when starting/ending the speech within a sentence.
 	EventsSentence,
-	/// Send [`spiel::Event`] when starting/ending the speech within a given range.
+	/// Send [`crate::Event`] when starting/ending the speech within a given range.
 	EventsRange,
-	/// Send [`spiel::Event`] when starting/ending the speech between an SSML `<mark>` tag.
+	/// Send [`crate::Event`] when starting/ending the speech between an SSML `<mark>` tag.
 	EventsSSMLMark,
 	/// Will interpret `<say-as interpret-as="date">`
 	SSMLSayAsDate,
@@ -69,14 +70,19 @@ pub enum VoiceFeature {
 	SSMLToken,
 }
 
-static_assertions::assert_impl_all!(VoiceFeature: BitFlag, Type);
-
-use zbus::zvariant::{Structure, Type, Value};
+use zbus::zvariant::{Type, Value};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Type, serde::Serialize, serde::Deserialize)]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct VoiceFeatureSet(BitFlags<VoiceFeature>);
+
+impl VoiceFeatureSet {
+	#[must_use]
+	pub fn empty() -> Self {
+		VoiceFeatureSet(BitFlags::<VoiceFeature>::EMPTY)
+	}
+}
 
 impl TryFrom<Value<'_>> for VoiceFeatureSet {
 	type Error = zbus::zvariant::Error;
@@ -84,21 +90,21 @@ impl TryFrom<Value<'_>> for VoiceFeatureSet {
 		Ok(VoiceFeatureSet(BitFlags::from_bits_truncate(TryInto::<u64>::try_into(zv)?)))
 	}
 }
-impl<'a> From<VoiceFeatureSet> for Structure<'a> {
-	fn from(vfs: VoiceFeatureSet) -> Structure<'a> {
-		Structure::from((vfs.0.bits(),))
-	}
-}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Type, PartialEq, Eq)]
+#[serde(transparent)]
+#[repr(transparent)]
+pub struct VoiceList(Vec<Voice>);
 
 /// All the information about a voice, including its audio output format, capabilities, and a
 /// string-based unique ID in order to reference it.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Value, Type, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Type, PartialEq, Eq)]
 #[zvariant(signature = "ssstas")]
 pub struct Voice {
 	/// A human-readable name.
-	name: String,
+	pub name: String,
 	/// A unique identifier for calling [`ProviderProxy::synthesize`].
-	id: String,
+	pub id: String,
 	/// A MIME followed by audio format information in GStreamer-Caps style, e.g.:
 	///
 	/// - `audio/x-raw,format=S32LE,channels=2,rate=22050`
@@ -111,11 +117,25 @@ pub struct Voice {
 	///     - Sample rate: 22050
 	///
 	/// It is up to the caller to determine what to do with this string.
-	mime_format: String,
-	/// Bitflag of [`VoiceFeatures`].
-	features: VoiceFeatureSet,
+	pub mime_format: String,
+	/// Bitflag of [`VoiceFeature`].
+	pub features: VoiceFeatureSet,
 	/// A list of BCP 47 tags.
-	languages: Vec<String>,
+	pub languages: Vec<String>,
+}
+
+impl TryFrom<Value<'_>> for Voice {
+	type Error = zbus::zvariant::Error;
+	fn try_from(zv: Value<'_>) -> Result<Self, Self::Error> {
+		let (name, id, mime_format, features, languages) = zv.try_into()?;
+		Ok(Voice { name, id, mime_format, features, languages })
+	}
+}
+impl From<Voice> for Value<'_> {
+	fn from(voice: Voice) -> Self {
+		let Voice { name, id, mime_format, features, languages } = voice;
+		(name, id, mime_format, features.0.bits(), languages).into()
+	}
 }
 
 #[proxy(interface = "org.freedesktop.Speech.Provider")]
@@ -153,7 +173,56 @@ fn serialize_deserialize_dbus() {
 		features: VoiceFeatureSet(VoiceFeature::EventsWord | VoiceFeature::SSMLSub),
 	};
 	let ctxt = Context::new_dbus(LE, 0);
-	let encoded = to_bytes(ctxt, &voice).unwrap();
-	let (voice2, _decoded) = encoded.deserialize::<Voice>().unwrap();
+	let encoded = to_bytes(ctxt, &voice).expect("Unable to serialize over DBus");
+	let (voice2, _decoded) = encoded
+		.deserialize::<Voice>()
+		.expect("Unable to deserialzie from DBus data");
 	assert_eq!(voice, voice2);
+}
+
+use zbus::{fdo::DBusProxy, Connection};
+
+pub struct Client<'a> {
+	con: Connection,
+	fdo: DBusProxy<'a>,
+}
+
+impl Client<'_> {
+	/// Create a new Spiel client.
+	///
+	/// # Errors
+	///
+	/// Anything that causes the `DBus` connection to fail will be returned as an error.
+	/// You need an active session in order to complete this.
+	pub async fn new() -> Result<Self, zbus::Error> {
+		let con = Connection::session().await?;
+		let fdo = DBusProxy::new(&con).await?;
+		Ok(Client { con, fdo })
+	}
+	/// Get a list of speech providers.
+	///
+	/// # Errors
+	///
+	/// Any error that causes `DBus` to either be:
+	///
+	/// 1. Unable to query the session for activatable names, or
+	/// 2. Stops the creation of proxies pointing to a name ending in `Speech.Provider`.
+	pub async fn list_providers(&self) -> Result<Vec<ProviderProxy<'_>>, zbus::Error> {
+		let names =
+			self.fdo.list_names()
+				.await?
+				.into_iter()
+				.filter(|name| name.ends_with(".Speech.Provider"));
+		let mut providers = Vec::new();
+		for name in names {
+			let proxy = ProviderProxy::new(
+				&self.con,
+				name.clone(),
+				format!("/{}", name.as_str().replace('.', "/")),
+			)
+			.await?;
+			providers.push(proxy);
+		}
+		Ok(providers)
+	}
 }
