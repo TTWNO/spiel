@@ -17,7 +17,8 @@ pub use protocol::poll_read_message;
 #[cfg(feature = "reader")]
 pub use protocol::Reader;
 pub use protocol::{
-	read_message, read_message_type, ChunkType, Event, EventType, Message, MessageType,
+	read_message, read_message_type, write_message, ChunkType, Event, EventType, Message,
+	MessageType,
 };
 #[cfg(feature = "alloc")]
 pub use protocol::{EventOwned, MessageOwned};
@@ -27,3 +28,5 @@ extern crate alloc;
 
 #[cfg(feature = "client")]
 pub mod client;
+#[cfg(feature = "client")]
+pub use client::{Client, Voice, VoiceFeatureSet};
