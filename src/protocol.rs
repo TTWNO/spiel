@@ -2,9 +2,9 @@
 
 #[cfg(feature = "alloc")]
 use alloc::{string::String, string::ToString};
-use core::str::Utf8Error;
 #[cfg(feature = "poll")]
 use core::task::Poll;
+use core::{fmt, str::Utf8Error};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Error {
@@ -22,6 +22,37 @@ pub enum Error {
 	/// Since the text should be ASCII conformant, this should never happen.
 	Utf8(Utf8Error),
 }
+impl fmt::Display for Error {
+	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Error::NotEnoughBytes(more) => {
+				fmt.write_str("Not enough bytes; need ")?;
+				more.fmt(fmt)?;
+				fmt.write_str(" more")
+			}
+			Error::InvalidEventType(ty) => {
+				fmt.write_str("Invalid event type: ")?;
+				ty.fmt(fmt)?;
+				fmt.write_str(". Valid values are 1, 2, 3, 4")
+			}
+			Error::InvalidChunkType(ty) => {
+				fmt.write_str("Invalid chunk type: ")?;
+				ty.fmt(fmt)?;
+				fmt.write_str(". Valid values are 1, 2")
+			}
+			Error::NotEnoughSpace(more) => {
+				fmt.write_str("Not enough space in write buffer; need ")?;
+				more.fmt(fmt)?;
+				fmt.write_str(" more")
+			}
+			Error::Utf8(utfe) => {
+				fmt.write_str("UTF-8 Error: ")?;
+				utfe.fmt(fmt)
+			}
+		}
+	}
+}
+impl core::error::Error for Error {}
 
 #[cfg(feature = "alloc")]
 use bytes::Bytes;
@@ -67,7 +98,6 @@ pub enum EventType {
 	Mark = 4,
 }
 
-#[cfg(test)]
 impl EventType {
 	fn to_ne_bytes(self) -> [u8; 1] {
 		match self {
@@ -462,7 +492,7 @@ fn test_wave_reader() {
 fn test_read_write_version() {
 	let mt = Message::Version("wowz");
 	let buf = &mut [0; 1024];
-	let _offset = write_message_unchecked(&mt.clone(), &mut buf[..]);
+	let _offset = write_message(&mt.clone(), &mut buf[..]);
 	let (_read_offset, mt2) = read_message(&buf[..], false).expect("Valid MessageType!");
 	assert_eq!(mt, mt2);
 }
@@ -481,7 +511,7 @@ fn test_read_write_event() {
 	let data_writer = &mut data[14..(14 + mt_name.len())];
 	data_writer.copy_from_slice(mt_name.as_bytes());
 	let buf = &mut [0u8; 1024];
-	let _offset = write_message_unchecked(&mt.clone(), &mut buf[..]);
+	let _offset = write_message(&mt.clone(), &mut buf[..]);
 	let (_read_offset, mt2) = read_message(&buf[..], true).expect("Valid MessageType!");
 	assert_eq!(mt, mt2);
 }
@@ -494,7 +524,7 @@ fn test_read_write_audio() {
 	let data_writer = &mut data[5..(5 + samples.len())];
 	data_writer.copy_from_slice(&samples[..]);
 	let buf = &mut [0u8; 1024];
-	let _offset = write_message_unchecked(&mt.clone(), &mut buf[..]);
+	let _offset = write_message(&mt.clone(), &mut buf[..]);
 	let (_read_offset, mt2) = read_message(&buf[..], true).expect("Valid MessageType");
 	let Message::Audio(samples2) = mt2 else {
 		assert_eq!(mt, mt2);
@@ -504,16 +534,26 @@ fn test_read_write_audio() {
 	assert_eq!(mt, mt2);
 }
 
-#[cfg(test)]
-pub fn write_message_unchecked(mt: &Message, buf: &mut [u8]) -> usize {
+/// Write a message to the buffer.
+///
+/// # Errors
+///
+/// Fails if the buiffer is too small.
+pub fn write_message(mt: &Message, buf: &mut [u8]) -> Result<usize, Error> {
 	match mt {
 		Message::Version(version) => {
+			if buf.len() < 4 {
+				return Err(Error::NotEnoughSpace(4 - buf.len()));
+			}
 			let buf_first_4 = &mut buf[..4];
 
 			buf_first_4.copy_from_slice(version.as_bytes());
-			4
+			Ok(4)
 		}
 		Message::Audio(samples) => {
+			if buf.len() < 5 + samples.len() {
+				return Err(Error::NotEnoughSpace((5 + samples.len()) - buf.len()));
+			}
 			buf[0] = 1;
 			let samples_len = samples.len();
 			let samp_writer = &mut buf[1..5];
@@ -521,9 +561,14 @@ pub fn write_message_unchecked(mt: &Message, buf: &mut [u8]) -> usize {
 			samp_writer.copy_from_slice(&(samples_len as u32).to_ne_bytes());
 			let data_writer = &mut buf[5..(samples_len + 5)];
 			data_writer.copy_from_slice(samples);
-			5 + samples_len
+			Ok(5 + samples_len)
 		}
 		Message::Event(Event { typ, start, end, name: maybe_name }) => {
+			if buf.len() < 14 + maybe_name.unwrap_or_default().len() {
+				return Err(Error::NotEnoughSpace(
+					(14 + maybe_name.unwrap_or_default().len()) - buf.len(),
+				));
+			}
 			buf[0] = 2;
 			let typ_write = &mut buf[1..2];
 			typ_write.copy_from_slice(&typ.to_ne_bytes());
@@ -540,7 +585,7 @@ pub fn write_message_unchecked(mt: &Message, buf: &mut [u8]) -> usize {
 				let name_write = &mut buf[name_offset..(name_offset + name_len)];
 				name_write.copy_from_slice(name.as_bytes());
 			}
-			name_offset + name_len
+			Ok(name_offset + name_len)
 		}
 	}
 }
