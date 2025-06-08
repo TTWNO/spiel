@@ -59,3 +59,13 @@ required-features = ["client"]
 name = "write_to_pipe"
 path = "./examples/write_something_to_pipe.rs"
 required-features = ["client"]
+
+[[example]]
+name = "make_provider"
+path = "./examples/provider.rs"
+required-features = ["client"]
+
+[[example]]
+name = "test_provider"
+path = "./examples/test_provider.rs"
+required-features = ["client"]
