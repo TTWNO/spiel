@@ -4,7 +4,7 @@
 
 use std::{error::Error, io, io::Read, os::fd::OwnedFd};
 
-use spiel::{read_message, Client, Event, EventType, Message};
+use spiel::{read_message, Client, Event, EventType, Message, Reader};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -30,22 +30,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		)
 		.await?;
 		println!("SENT!");
-		let mut buf = Vec::new();
-		let bytes_read = reader.read_to_end(&mut buf)?;
-		println!("BYTES READ: {bytes_read}");
-		let (bytes_read2, header) = read_message(&buf[..], false)?;
-		let (bytes_read3, msg) = read_message(&buf[bytes_read2..], true)?;
-		assert_eq!(bytes_read, bytes_read2 + bytes_read3);
-		assert_eq!(header, Message::Version("0.01"));
+		let mut reader =
+			Reader::from_source(reader).expect("Unable to create reader from pipe!");
+		let header = reader.try_read().unwrap();
+		assert_eq!(header, Message::Version("0.01").into_owned());
+		println!("Received header information: {header:?}");
+		let event = reader.try_read().unwrap();
 		assert_eq!(
-			msg,
+			event,
 			Message::Event(Event {
 				typ: EventType::Word,
 				start: 69,
 				end: 420,
 				name: Some("Hello :)"),
 			})
+			.into_owned()
 		);
+		println!("Received event information: {event:?}");
 		break;
 	}
 	assert!(found, "Could not find org.domain.Speech.Provider!");

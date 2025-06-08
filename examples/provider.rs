@@ -62,6 +62,7 @@ impl MySpeechProvider {
 			.write(&buffer[..bytes_written_buf + offset])
 			.map_err(|_| Error::IOError("Cannot write to file descriptor".to_string()))
 			.expect("Unable to write to file descriptor!");
+		file.flush().unwrap();
 		println!("Wrote {bytes_written_fd} bytes to Fd");
 		assert_eq!(bytes_written_buf + offset, bytes_written_fd);
 	}
