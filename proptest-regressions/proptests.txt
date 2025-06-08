@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 8e1f55c50c10fb9f07c393086be490054d60e668b0c2585b8df607d610b52786 # shrinks to msg = Audio([])
