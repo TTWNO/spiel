@@ -13,6 +13,11 @@ impl<W: Write> Writer<W> {
 		Writer { inner, version: version.to_string(), header_done: false }
 	}
 
+	/// Write a single message into the buffer.
+	///
+	/// # Errors
+	///
+	/// See [`io::Error`].
 	pub fn write_message(&mut self, message: &Message) -> Result<(), io::Error> {
 		if !self.header_done {
 			let header_msg = Message::Version(&self.version);
@@ -24,6 +29,11 @@ impl<W: Write> Writer<W> {
 		Ok(())
 	}
 
+	/// Flush the buffer. Runs [`io::Writer::flush`].
+	///
+	/// # Errors
+	///
+	/// See [`io::Error`].
 	pub fn flush(&mut self) -> io::Result<()> {
 		self.inner.flush()
 	}

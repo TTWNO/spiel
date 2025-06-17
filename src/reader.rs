@@ -1,4 +1,7 @@
-use alloc::string::String;
+use alloc::{
+	string::{String, ToString},
+	vec::Vec,
+};
 #[cfg(feature = "std")]
 use std::io;
 
@@ -16,6 +19,12 @@ pub struct Reader {
 
 #[cfg(feature = "std")]
 impl Reader {
+	/// Uses a generic type that implements [`io::Read`] in order to construct the reader.
+	/// This will call [`io::Read::read_to_end`] and will block the thread until complete.
+	///
+	/// # Errors
+	///
+	/// See [`io::Error`].
 	pub fn from_source<T>(mut reader: T) -> Result<Self, io::Error>
 	where
 		T: io::Read,
@@ -51,7 +60,6 @@ impl Reader {
 
 		let msg = match message_type {
 			MessageType::Version { version } => {
-				println!("VER-IN: {version:?}");
 				self.header_done = true;
 				MessageOwned::Version(
 					str::from_utf8(&version[..])

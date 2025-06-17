@@ -1,4 +1,3 @@
-
 use proptest::{prelude::*, string::bytes_regex};
 
 use crate::{protocol::*, Reader, Writer};

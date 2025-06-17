@@ -6,9 +6,11 @@ use alloc::{string::String, string::ToString};
 use core::task::Poll;
 use core::{fmt, str::Utf8Error};
 
-impl<'a> Message<'a> {
+impl Message<'_> {
 	/// Serializes the message into a Vec<u8> in the same binary format as the reader expects.
 	#[cfg(feature = "alloc")]
+	#[allow(clippy::cast_possible_truncation)]
+	#[must_use]
 	pub fn to_bytes(&self) -> alloc::vec::Vec<u8> {
 		match self {
 			Message::Version(version) => {
