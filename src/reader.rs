@@ -5,11 +5,9 @@ use alloc::{
 #[cfg(feature = "std")]
 use std::io;
 
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 
-use crate::{
-	read_message_type, Error, Event, EventOwned, EventType, Message, MessageOwned, MessageType,
-};
+use crate::{read_message_type, Error, EventOwned, MessageOwned, MessageType};
 
 #[derive(Default)]
 pub struct Reader {

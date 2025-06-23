@@ -94,8 +94,6 @@ impl core::error::Error for Error {}
 
 #[cfg(feature = "alloc")]
 use bytes::Bytes;
-#[cfg(feature = "reader")]
-use bytes::BytesMut;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 

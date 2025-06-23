@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use crate::protocol::{Error, Message};
+use crate::protocol::Message;
 
 pub struct Writer<W: Write> {
 	pub(crate) inner: W,
@@ -9,8 +9,8 @@ pub struct Writer<W: Write> {
 }
 
 impl<W: Write> Writer<W> {
-	pub fn new(inner: W, version: &str) -> Self {
-		Writer { inner, version: version.to_string(), header_done: false }
+	pub fn new(inner: W) -> Self {
+		Writer { inner, version: "0.01".to_string(), header_done: false }
 	}
 
 	/// Write a single message into the buffer.
@@ -26,6 +26,18 @@ impl<W: Write> Writer<W> {
 		}
 		let bytes = message.to_bytes(); // Assuming Message has a to_bytes() method
 		self.inner.write_all(&bytes)?;
+		Ok(())
+	}
+
+	/// Write multiple messages into the buffer.
+	///
+	/// # Errors
+	///
+	/// See [`io::Error`].
+	pub fn write_messages(&mut self, messages: &[Message]) -> Result<(), io::Error> {
+		for message in messages {
+			self.write_message(message)?;
+		}
 		Ok(())
 	}
 

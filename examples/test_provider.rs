@@ -2,14 +2,14 @@
 //! on DBus.
 //! And that methods can be sent and dealt with appropriately.
 
-use std::{error::Error, io, io::Read, os::fd::OwnedFd};
+use std::{error::Error, io, os::fd::OwnedFd};
 
-use spiel::{read_message, Client, Event, EventType, Message, Reader};
+use spiel::{Client, Event, EventType, Message, Reader};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let client = Client::new().await?;
-	let (mut reader, writer_pipe) = io::pipe()?;
+	let (reader, writer_pipe) = io::pipe()?;
 	let writer = OwnedFd::from(writer_pipe);
 	let providers = client.list_providers().await?;
 	let mut found = false;
@@ -18,7 +18,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			continue;
 		}
 		found = true;
-		print!("TRY SEND...");
 		provider.synthesize(
 			writer.into(), // pipe writer
 			"my-voice",    // voice ID
@@ -29,12 +28,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			"en-NZ",       // English, New Zealand
 		)
 		.await?;
-		println!("SENT!");
 		let mut reader =
 			Reader::from_source(reader).expect("Unable to create reader from pipe!");
 		let header = reader.try_read().unwrap();
 		assert_eq!(header, Message::Version("0.01").into_owned());
-		println!("Received header information: {header:?}");
 		let event = reader.try_read().unwrap();
 		assert_eq!(
 			event,
@@ -46,7 +43,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			})
 			.into_owned()
 		);
-		println!("Received event information: {event:?}");
 		break;
 	}
 	assert!(found, "Could not find org.domain.Speech.Provider!");

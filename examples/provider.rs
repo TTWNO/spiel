@@ -1,10 +1,6 @@
-use std::{
-	io::{PipeWriter, Write},
-	os::fd::OwnedFd,
-	time::Duration,
-};
+use std::{io::PipeWriter, os::fd::OwnedFd, time::Duration};
 
-use spiel::{write_message, Event, EventType, Message, Voice, VoiceFeatureSet};
+use spiel::{Event, EventType, Message, Voice, VoiceFeatureSet, Writer};
 use tokio::time::sleep;
 use zbus::{connection::Builder, fdo::Error, interface, zvariant::Fd};
 
@@ -39,32 +35,20 @@ impl MySpeechProvider {
 		// etc.
 		//
 		// We are just gonna write a simple `Message::Event`
-		let header = Message::Version("0.01");
-		let msg = Message::Event(Event {
+		let msgs = [Message::Event(Event {
 			typ: EventType::Word,
 			start: 69,
 			end: 420,
 			name: Some("Hello :)"),
-		});
+		})];
 		// buffer has fixed size in this case
-		let mut buffer: [u8; 1024] = [0; 1024];
 		let writer: OwnedFd = pipe_fd
 			.try_into()
 			.map_err(|_| Error::IOError("Cannot open file descriptor".to_string()))
 			.expect("Unable to open file descriptor!");
-		let mut file = PipeWriter::from(writer);
-		// TODO: implement a more convenient way to not have to store a buffer, etc.
-		let offset =
-			write_message(&header, &mut buffer).expect("Unable to write to buffer!");
-		let bytes_written_buf = write_message(&msg, &mut buffer[offset..])
-			.expect("Unable to write to buffer!");
-		let bytes_written_fd = file
-			.write(&buffer[..bytes_written_buf + offset])
-			.map_err(|_| Error::IOError("Cannot write to file descriptor".to_string()))
-			.expect("Unable to write to file descriptor!");
-		file.flush().unwrap();
-		println!("Wrote {bytes_written_fd} bytes to Fd");
-		assert_eq!(bytes_written_buf + offset, bytes_written_fd);
+		let file = PipeWriter::from(writer);
+		let mut writer = Writer::new(file);
+		writer.write_messages(&msgs).unwrap();
 	}
 }
 
