@@ -37,7 +37,7 @@ pub mod reader;
 #[cfg(feature = "reader")]
 pub use reader::Reader;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "proptests"))]
 pub mod proptests;
 
 #[cfg(feature = "std")]

@@ -98,6 +98,8 @@ fn test_wave_reader() {
 	use alloc::string::ToString;
 
 	use assert_matches::assert_matches;
+
+	use crate::EventType;
 	let mut reader = Reader::default();
 	let data: &[u8] = include_bytes!("../test.wav");
 	reader.push(data);

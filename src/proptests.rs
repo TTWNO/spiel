@@ -1,4 +1,4 @@
-use proptest::{prelude::*, string::bytes_regex};
+use proptest::prelude::*;
 
 use crate::{protocol::*, Reader, Writer};
 
@@ -43,10 +43,10 @@ impl Arbitrary for Event<'static> {
 				typ,
 				start,
 				end,
-				name: if name.is_none() {
-					None
+				name: if let Some(n) = name {
+					Some(Box::leak(n.into_boxed_str()))
 				} else {
-					Some(Box::leak(name.unwrap().into_boxed_str()))
+					None
 				},
 			})
 			.boxed()
@@ -78,9 +78,6 @@ impl Arbitrary for Message<'static> {
 
 	fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
 		prop_oneof![
-			// Version
-			//				bytes_regex(".{4}").unwrap()
-			//            .prop_map(|s| Message::Version(&str::from_utf8(Box::leak(s.into_boxed_slice())).unwrap())),
 			// Audio
 			proptest::collection::vec(any::<u8>(), 0..32)
 				.prop_map(|v| Message::Audio(Box::leak(v.into_boxed_slice()))),
@@ -152,43 +149,31 @@ impl Arbitrary for MessageType {
 	}
 }
 
-fn bytes_ver() -> impl Strategy<Value = &'static str> {
-	".*".prop_filter_map("Must be exactly 4 UTF-8 bytes", |s| {
-		if s.len() == 4 {
-			let leak: &'static str = Box::leak(s.into_boxed_str());
-			Some(leak)
-		} else {
-			None
-		}
-	})
-}
-
 proptest::proptest! {
     #[test]
     fn message_roundtrip(
 	msg in any::<Message>(),
-	version in bytes_ver()
     ) {
-	println!("VB: {version:?}");
-	println!("VB+B: {:?}", version.bytes());
-	let mut writer = Writer::new(Vec::new(), version);
-	writer.write_message(&msg).unwrap();
+	let mut writer = Writer::new(Vec::new());
+	writer.write_message(&msg)?;
 	let mut reader = Reader::from(writer.inner);
 	let header = reader.try_read()?;
-	assert_eq!(header, Message::Version(&version).into_owned());
+	assert_eq!(header, Message::Version("0.01").into_owned());
 	let decoded = reader.try_read()?;
 	assert_eq!(msg.into_owned(), decoded);
     }
 }
 
-#[cfg(feature = "alloc")]
-proptest::proptest! {
-    #[test]
-    fn message_owned_roundtrip(msg in any::<MessageOwned>()) {
-	//let mut writer = Writer::new(Vec::new());
-	//writer.write_message(&msg).unwrap();
-	//let mut reader = Reader::from(writer.inner);
-	//let decoded = reader.try_read()?;
-	//assert_eq!(msg, decoded);
-    }
-}
+// TODO: an additional proptests for testing round-trips
+//#[cfg(feature = "alloc")]
+//proptest::proptest! {
+//    #[test]
+//    fn message_owned_roundtrip(msg in any::<MessageOwned>()) {
+//	let mut writer = Writer::new(Vec::new());
+//	writer.write_message(&msg).unwrap();
+//	let mut reader = Reader::from(writer.inner);
+//  let _version = reader.try_read()?;
+//	let decoded = reader.try_read()?;
+//	assert_eq!(msg, decoded);
+//    }
+//}

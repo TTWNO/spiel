@@ -19,6 +19,7 @@ std = ["alloc"]
 alloc = ["serde?/alloc", "dep:bytes"]
 poll = []
 serde = ["serde/derive", "bytes?/serde", "enumflags2?/serde"]
+proptests = ["reader", "client"]
 
 [dependencies]
 bytes = { version = "1.9.0", default-features = false, optional = true }
