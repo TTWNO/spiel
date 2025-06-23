@@ -13,7 +13,7 @@ Note that features with an unmarked checkbox are not yet implemented.
 - [X] `alloc`: pulls in the [`bytes`](https://crates.io/crates/bytes), if `serde` is enabled. It exposes new types like [`crate::MessageOwned`] and [`crate::EventOwned`], which are owned versions of [`crate::Message`] and [`crate::Event`].
 - [X] `poll`: add wrapper functions that return `Poll::Pending` when there is not enough data in the buffer. This is not for general use, but rather only if you are creating an async integration.
 - [X] `serde`: activate [`serde::Serialize`] and [`serde::Deserialize`] on all types.
-- [ ] `provider`: activates [`std`] and pulls in the [`zbus`](https://crates.io/crates/zbus) crate. This will provide the `SpeechProvider` struct, which can be used to provide speech over the Spiel protocol via `DBus`.
+- [X] `provider`: activates [`std`] and pulls in the [`zbus`](https://crates.io/crates/zbus) crate. This will provide the `SpeechProvider` struct, which can be used to provide speech over the Spiel protocol via `DBus`.
 
 ## MSRV
 
