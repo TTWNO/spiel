@@ -53,8 +53,12 @@ impl Reader {
 	/// See [`read_message_type`] for failure cases.
 	pub fn try_read(&mut self) -> Result<MessageOwned, Error> {
 		let mut data = self.buffer.split().freeze();
-		let (new_buf, message_type) = read_message_type(&data, self.header_done)
-			.map(|(offset, mt)| (BytesMut::from(&data[offset..]), mt))?;
+		println!("D: {data:?}");
+		let (new_buf, message_type) =
+			read_message_type(&data, self.header_done).map(|(offset, mt)| {
+				println!("OFFSET: {offset}");
+				(BytesMut::from(&data[offset..]), mt)
+			})?;
 
 		let msg = match message_type {
 			MessageType::Version { version } => {

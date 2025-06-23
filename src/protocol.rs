@@ -247,7 +247,7 @@ pub fn read_message_type(
 		ChunkType::Audio => {
 			let (cs_size, chunk_size) = read_u32(&buf[1..])?;
 			let msg_b = MessageType::Audio {
-				samples_offset: ct_offset + cs_size,
+				samples_offset: ct_offset + cs_size + 1,
 				samples_len: chunk_size as usize,
 			};
 			Ok((cs_size + chunk_size as usize, msg_b))
