@@ -182,7 +182,8 @@ proptest::proptest! {
     #[test]
     fn message_owned_roundtrip(msg in any::<Message>()) {
 	let mut writer = Writer::new(Vec::new());
-	writer.write_message(&msg).expect("Unable to write message");
+	writer.write_messages(&vec![msg.clone()][..]).expect("Unable to write message");
+  writer.flush();
 	let mut reader = Reader::from(writer.inner);
   let _version = reader.try_read()?;
 	let decoded = reader.try_read()?;

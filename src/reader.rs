@@ -98,9 +98,8 @@ fn test_wave_reader() {
 	use assert_matches::assert_matches;
 
 	use crate::EventType;
-	let mut reader = Reader::default();
 	let data: &[u8] = include_bytes!("../test.wav");
-	reader.push(data);
+	let mut reader = Reader::from_source(data).expect("Able to make buffer from test.wav");
 	assert_eq!(reader.try_read(), Ok(MessageOwned::Version("0.01".to_string())));
 	assert_eq!(
 		reader.try_read(),
