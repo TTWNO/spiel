@@ -1,7 +1,4 @@
-use alloc::{
-	string::{String, ToString},
-	vec::Vec,
-};
+use alloc::{string::ToString, vec::Vec};
 #[cfg(feature = "std")]
 use std::io;
 
@@ -53,12 +50,8 @@ impl Reader {
 	/// See [`read_message_type`] for failure cases.
 	pub fn try_read(&mut self) -> Result<MessageOwned, Error> {
 		let mut data = self.buffer.split().freeze();
-		println!("D: {data:?}");
-		let (new_buf, message_type) =
-			read_message_type(&data, self.header_done).map(|(offset, mt)| {
-				println!("OFFSET: {offset}");
-				(BytesMut::from(&data[offset..]), mt)
-			})?;
+		let (new_buf, message_type) = read_message_type(&data, self.header_done)
+			.map(|(offset, mt)| (BytesMut::from(&data[offset..]), mt))?;
 
 		let msg = match message_type {
 			MessageType::Version { version } => {
@@ -80,13 +73,14 @@ impl Reader {
 					name: if name_len == 0 {
 						None
 					} else {
-						// TODO: try to remove this clone!
-						Some(data
+						let bytes = data
 							.split_off(name_offset - 1)
-							.split_to(name_len)
-							.into_iter()
-							.map(char::from)
-							.collect::<String>())
+							.split_to(name_len);
+						// TODO: try to remove this clone!
+						let s = str::from_utf8(&bytes[..])
+							.map_err(Error::Utf8)?
+							.to_string();
+						Some(s)
 					},
 				})
 			}

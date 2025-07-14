@@ -33,7 +33,7 @@ impl Message<'_> {
 					1 + 1 + 4 + 4 + 4 + name_bytes.len(),
 				);
 				buf.push(2); // ChunkType::Event
-				buf.push(ev.typ as u8);
+				buf.push(ev.typ.to_ne_bytes()[0]);
 				buf.extend_from_slice(&ev.start.to_ne_bytes());
 				buf.extend_from_slice(&ev.end.to_ne_bytes());
 				buf.extend_from_slice(&name_len.to_ne_bytes());

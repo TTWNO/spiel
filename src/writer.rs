@@ -22,11 +22,10 @@ impl<W: Write> Writer<W> {
 		if !self.header_done {
 			let header_msg = Message::Version(&self.version);
 			let bytes = header_msg.to_bytes();
-			println!("B: {bytes:?}");
 			self.inner.write_all(&bytes)?;
+			self.header_done = true;
 		}
 		let bytes = message.to_bytes(); // Assuming Message has a to_bytes() method
-		println!("B: {bytes:?}");
 		self.inner.write_all(&bytes)?;
 		Ok(())
 	}

@@ -37,7 +37,13 @@ impl Arbitrary for Event<'static> {
 			any::<EventType>(),
 			any::<u32>(),
 			any::<u32>(),
-			prop_oneof![Just(None), ".*".prop_map(Some),],
+			any::<Vec<char>>().prop_map(|chrs| {
+				if chrs.is_empty() {
+					None
+				} else {
+					Some(String::from_iter(&chrs[..]))
+				}
+			}),
 		)
 			.prop_map(|(typ, start, end, name)| Event {
 				typ,
@@ -64,7 +70,13 @@ impl Arbitrary for EventOwned {
 			any::<EventType>(),
 			any::<u32>(),
 			any::<u32>(),
-			prop_oneof![Just(None), ".*".prop_map(Some),],
+			any::<Vec<char>>().prop_map(|chrs| {
+				if chrs.is_empty() {
+					None
+				} else {
+					Some(String::from_iter(&chrs[..]))
+				}
+			}),
 		)
 			.prop_map(|(typ, start, end, name)| EventOwned { typ, start, end, name })
 			.boxed()
@@ -165,15 +177,15 @@ proptest::proptest! {
 }
 
 // TODO: an additional proptests for testing round-trips
-//#[cfg(feature = "alloc")]
-//proptest::proptest! {
-//    #[test]
-//    fn message_owned_roundtrip(msg in any::<MessageOwned>()) {
-//	let mut writer = Writer::new(Vec::new());
-//	writer.write_message(&msg).unwrap();
-//	let mut reader = Reader::from(writer.inner);
-//  let _version = reader.try_read()?;
-//	let decoded = reader.try_read()?;
-//	assert_eq!(msg, decoded);
-//    }
-//}
+#[cfg(feature = "alloc")]
+proptest::proptest! {
+    #[test]
+    fn message_owned_roundtrip(msg in any::<Message>()) {
+	let mut writer = Writer::new(Vec::new());
+	writer.write_message(&msg).expect("Unable to write message");
+	let mut reader = Reader::from(writer.inner);
+  let _version = reader.try_read()?;
+	let decoded = reader.try_read()?;
+	assert_eq!(msg.into_owned(), decoded);
+    }
+}
