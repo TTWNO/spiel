@@ -2,6 +2,9 @@
 name = "spiel"
 version = "0.2.0"
 edition = "2021"
+authors = [
+	"Tait Hoyem <tait@tait.tech>",
+]
 license = "MIT OR Apache-2.0"
 description = "A pure-Rust Spiel format parser, client, and proxy implementation."
 repository = "https://github.com/TTWNO/spiel"
