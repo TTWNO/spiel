@@ -39,6 +39,10 @@ impl From<Vec<u8>> for Reader {
 }
 
 impl Reader {
+	#[must_use]
+	pub fn new() -> Reader {
+		Reader { header_done: false, buffer: BytesMut::new() }
+	}
 	pub fn push(&mut self, other: &[u8]) {
 		self.buffer.extend_from_slice(other);
 	}
@@ -91,6 +95,16 @@ impl Reader {
 	}
 }
 
+#[cfg(feature = "std")]
+#[test]
+fn test_std_reader() {
+	let data: &[u8] = include_bytes!("../test.wav");
+	let mut reader = Reader::new();
+	reader.push(data);
+	let std_reader = Reader::from_source(data).expect("Able to make buffer from test.wav");
+	assert_eq!(std_reader.buffer, reader.buffer);
+}
+
 #[test]
 fn test_wave_reader() {
 	use alloc::string::ToString;
@@ -99,7 +113,8 @@ fn test_wave_reader() {
 
 	use crate::EventType;
 	let data: &[u8] = include_bytes!("../test.wav");
-	let mut reader = Reader::from_source(data).expect("Able to make buffer from test.wav");
+	let mut reader = Reader::new();
+	reader.push(data);
 	assert_eq!(reader.try_read(), Ok(MessageOwned::Version("0.01".to_string())));
 	assert_eq!(
 		reader.try_read(),
