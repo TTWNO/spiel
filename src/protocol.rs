@@ -6,6 +6,44 @@ use alloc::{string::String, string::ToString};
 use core::task::Poll;
 use core::{fmt, str::Utf8Error};
 
+impl Message<'_> {
+	/// Serializes the message into a Vec<u8> in the same binary format as the reader expects.
+	#[cfg(feature = "alloc")]
+	#[allow(clippy::cast_possible_truncation)]
+	#[must_use]
+	pub fn to_bytes(&self) -> alloc::vec::Vec<u8> {
+		match self {
+			Message::Version(version) => {
+				let mut buf = alloc::vec::Vec::with_capacity(4);
+				buf.extend_from_slice(version.as_bytes());
+				buf
+			}
+			Message::Audio(samples) => {
+				let mut buf = alloc::vec::Vec::with_capacity(1 + 4 + samples.len());
+				buf.push(1); // ChunkType::Audio
+				let len = samples.len() as u32;
+				buf.extend_from_slice(&len.to_ne_bytes());
+				buf.extend_from_slice(samples);
+				buf
+			}
+			Message::Event(ev) => {
+				let name_bytes = ev.name.map_or(&[][..], |n| n.as_bytes());
+				let name_len = name_bytes.len() as u32;
+				let mut buf = alloc::vec::Vec::with_capacity(
+					1 + 1 + 4 + 4 + 4 + name_bytes.len(),
+				);
+				buf.push(2); // ChunkType::Event
+				buf.push(ev.typ.to_ne_bytes()[0]);
+				buf.extend_from_slice(&ev.start.to_ne_bytes());
+				buf.extend_from_slice(&ev.end.to_ne_bytes());
+				buf.extend_from_slice(&name_len.to_ne_bytes());
+				buf.extend_from_slice(name_bytes);
+				buf
+			}
+		}
+	}
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum Error {
 	/// Reader does not have enough bytes to complete its read.
@@ -56,8 +94,6 @@ impl core::error::Error for Error {}
 
 #[cfg(feature = "alloc")]
 use bytes::Bytes;
-#[cfg(feature = "reader")]
-use bytes::BytesMut;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -81,7 +117,8 @@ pub struct Event<'a> {
 	pub name: Option<&'a str>,
 }
 
-#[derive(Debug)]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ChunkType {
 	Event,
@@ -120,7 +157,7 @@ fn read_version_type(buf: &[u8]) -> Result<(usize, MessageType), Error> {
 		return Err(Error::NotEnoughBytes(4 - buf.len()));
 	}
 	let buf_4: &[u8; 4] = &buf[..4].try_into().expect("Exactly 4 bytes");
-	Ok((4, MessageType::Version { version: buf_4.map(char::from) }))
+	Ok((4, MessageType::Version { version: *buf_4 }))
 }
 
 /// [`read_message`] takes a buffer and triees to read a [`Message`] from it.
@@ -210,7 +247,7 @@ pub fn read_message_type(
 		ChunkType::Audio => {
 			let (cs_size, chunk_size) = read_u32(&buf[1..])?;
 			let msg_b = MessageType::Audio {
-				samples_offset: ct_offset + cs_size,
+				samples_offset: ct_offset + cs_size + 1,
 				samples_len: chunk_size as usize,
 			};
 			Ok((cs_size + chunk_size as usize, msg_b))
@@ -329,165 +366,6 @@ fn read_message_event(buf: &[u8]) -> Result<(usize, Message<'_>), Error> {
 	))
 }
 
-#[cfg(feature = "reader")]
-#[derive(Default)]
-#[cfg_attr(all(feature = "serde", feature = "alloc"), derive(Serialize, Deserialize))]
-pub struct Reader {
-	header_done: bool,
-	buffer: BytesMut,
-}
-
-#[cfg(feature = "reader")]
-impl Reader {
-	pub fn push(&mut self, other: &[u8]) {
-		self.buffer.extend_from_slice(other);
-	}
-	/// Attempt to read from the reader's internal buffer.
-	/// We further translate the data from [`MessageType`] into an owned [`Message`] for use.
-	///
-	/// # Errors
-	///
-	/// See [`read_message_type`] for failure cases.
-	pub fn try_read(&mut self) -> Result<MessageOwned, Error> {
-		let mut data = self.buffer.split().freeze();
-		let (new_buf, message_type) = read_message_type(&data, self.header_done)
-			.map(|(offset, mt)| (BytesMut::from(&data[offset..]), mt))?;
-
-		let msg = match message_type {
-			MessageType::Version { version } => {
-				self.header_done = true;
-				MessageOwned::Version(version.into_iter().collect())
-			}
-			MessageType::Audio { samples_offset, samples_len } => MessageOwned::Audio(
-				data.split_off(samples_offset - 1).split_to(samples_len),
-			),
-			MessageType::Event { typ, start, end, name_offset, name_len } => {
-				MessageOwned::Event(EventOwned {
-					typ,
-					start,
-					end,
-					name: if name_len == 0 {
-						None
-					} else {
-						// TODO: try to remove this clone!
-						Some(data
-							.split_off(name_offset - 1)
-							.split_to(name_len)
-							.into_iter()
-							.map(char::from)
-							.collect::<String>())
-					},
-				})
-			}
-		};
-
-		self.buffer = new_buf;
-		Ok(msg)
-	}
-}
-
-#[cfg(feature = "reader")]
-#[test]
-fn test_wave_reader() {
-	use alloc::string::ToString;
-
-	use assert_matches::assert_matches;
-	let mut reader = Reader::default();
-	let data: &[u8] = include_bytes!("../test.wav");
-	reader.push(data);
-	assert_eq!(reader.try_read(), Ok(MessageOwned::Version("0.01".to_string())));
-	assert_eq!(
-		reader.try_read(),
-		Ok(MessageOwned::Event(EventOwned {
-			typ: EventType::Sentence,
-			start: 0,
-			end: 0,
-			name: None
-		}))
-	);
-	assert_eq!(
-		reader.try_read(),
-		Ok(MessageOwned::Event(EventOwned {
-			typ: EventType::Word,
-			start: 0,
-			end: 4,
-			name: None
-		}))
-	);
-	for i in 0..4 {
-		assert_matches!(reader.try_read(), Ok(MessageOwned::Audio(_)), "{i}");
-	}
-	let word_is = MessageOwned::Event(EventOwned {
-		typ: EventType::Word,
-		start: 5,
-		end: 7,
-		name: None,
-	});
-	let word_a = MessageOwned::Event(EventOwned {
-		typ: EventType::Word,
-		start: 8,
-		end: 9,
-		name: None,
-	});
-	let word_test = MessageOwned::Event(EventOwned {
-		typ: EventType::Word,
-		start: 10,
-		end: 14,
-		name: None,
-	});
-	let word_using = MessageOwned::Event(EventOwned {
-		typ: EventType::Word,
-		start: 15,
-		end: 20,
-		name: None,
-	});
-	let word_spiel = MessageOwned::Event(EventOwned {
-		typ: EventType::Word,
-		start: 21,
-		end: 26,
-		name: None,
-	});
-	let word_whaha = MessageOwned::Event(EventOwned {
-		typ: EventType::Word,
-		start: 28,
-		end: 35,
-		name: None,
-	});
-	assert_eq!(reader.try_read(), Ok(word_is));
-	for _ in 0..3 {
-		assert_matches!(reader.try_read(), Ok(MessageOwned::Audio(_)));
-	}
-	assert_eq!(reader.try_read(), Ok(word_a));
-	assert_matches!(reader.try_read(), Ok(MessageOwned::Audio(_)));
-	assert_matches!(reader.try_read(), Ok(MessageOwned::Audio(_)));
-	assert_eq!(reader.try_read(), Ok(word_test));
-	for _ in 0..6 {
-		assert_matches!(reader.try_read(), Ok(MessageOwned::Audio(_)));
-	}
-	assert_eq!(reader.try_read(), Ok(word_using));
-	for _ in 0..6 {
-		assert_matches!(reader.try_read(), Ok(MessageOwned::Audio(_)));
-	}
-	assert_eq!(reader.try_read(), Ok(word_spiel));
-	for _ in 0..14 {
-		assert_matches!(reader.try_read(), Ok(MessageOwned::Audio(_)));
-	}
-	assert_eq!(
-		reader.try_read(),
-		Ok(MessageOwned::Event(EventOwned {
-			typ: EventType::Sentence,
-			start: 28,
-			end: 28,
-			name: None
-		}))
-	);
-	assert_eq!(reader.try_read(), Ok(word_whaha));
-	for _ in 0..10 {
-		assert_matches!(reader.try_read(), Ok(MessageOwned::Audio(_)));
-	}
-	assert_eq!(&reader.buffer.freeze().slice(..)[..], &[]);
-}
-
 #[test]
 fn test_read_write_version() {
 	let mt = Message::Version("wowz");
@@ -598,7 +476,7 @@ pub fn write_message(mt: &Message, buf: &mut [u8]) -> Result<usize, Error> {
 /// Mostly, you should use [`Message`] instead.
 pub enum MessageType {
 	Version {
-		version: [char; 4],
+		version: [u8; 4],
 	},
 	/// With this variant, you should then be able to:
 	Audio {

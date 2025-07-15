@@ -1,7 +1,10 @@
 [package]
 name = "spiel"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+authors = [
+	"Tait Hoyem <tait@tait.tech>",
+]
 license = "MIT OR Apache-2.0"
 description = "A pure-Rust Spiel format parser, client, and proxy implementation."
 repository = "https://github.com/TTWNO/spiel"
@@ -19,6 +22,7 @@ std = ["alloc"]
 alloc = ["serde?/alloc", "dep:bytes"]
 poll = []
 serde = ["serde/derive", "bytes?/serde", "enumflags2?/serde"]
+proptests = ["reader", "client"]
 
 [dependencies]
 bytes = { version = "1.9.0", default-features = false, optional = true }
@@ -68,4 +72,4 @@ required-features = ["client"]
 [[example]]
 name = "test_provider"
 path = "./examples/test_provider.rs"
-required-features = ["client"]
+required-features = ["client", "reader"]

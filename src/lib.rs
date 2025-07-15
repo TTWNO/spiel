@@ -17,11 +17,9 @@ compile_error!("You need at least 32-bit pointers to use this crate.");
 mod protocol;
 #[cfg(feature = "poll")]
 pub use protocol::poll_read_message;
-#[cfg(feature = "reader")]
-pub use protocol::Reader;
 pub use protocol::{
-	read_message, read_message_type, write_message, ChunkType, Event, EventType, Message,
-	MessageType,
+	read_message, read_message_type, write_message, ChunkType, Error, Event, EventType,
+	Message, MessageType,
 };
 #[cfg(feature = "alloc")]
 pub use protocol::{EventOwned, MessageOwned};
@@ -33,3 +31,16 @@ extern crate alloc;
 pub mod client;
 #[cfg(feature = "client")]
 pub use client::{Client, Voice, VoiceFeatureSet};
+
+#[cfg(feature = "reader")]
+pub mod reader;
+#[cfg(feature = "reader")]
+pub use reader::Reader;
+
+#[cfg(all(test, feature = "proptests"))]
+pub mod proptests;
+
+#[cfg(feature = "std")]
+pub mod writer;
+#[cfg(feature = "std")]
+pub use writer::Writer;

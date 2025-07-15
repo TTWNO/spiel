@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 8e1f55c50c10fb9f07c393086be490054d60e668b0c2585b8df607d610b52786 # shrinks to msg = Audio([])
+cc 5d163de2a6118738e40571964fcfdba119d89c348e62dbea20ea7ca35d600082 # shrinks to msg = Event(Event { typ: Word, start: 0, end: 0, name: None })
+cc e0f73a0ff9d3f55330c7b49c5dd7d9ce99795ce3583d4254d96886c489da03ca # shrinks to msg = Event(Event { typ: Word, start: 0, end: 0, name: Some("") })
